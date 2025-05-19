@@ -463,7 +463,6 @@ async function processFiles(
 
     // Process invoice files
     let invoiceText = "";
-    let invoiceStructured: Record<string, any> = {};
     for (const file of invoiceFiles) {
       // Update processing state
       const fileIndex = processingState.files.findIndex(
@@ -475,7 +474,7 @@ async function processFiles(
       processingState.currentOcrFile = file.originalname;
 
       // Process the file
-      const { text, structuredData, error } = await ocrService.extractText(
+      const { text, error } = await ocrService.extractText(
         file.path
       );
       
@@ -483,9 +482,8 @@ async function processFiles(
         throw new Error(`OCR error: ${error}`);
       }
 
-      // Update processed text and structured data
+      // Update processed text
       invoiceText += text + "\n\n";
-      invoiceStructured = { ...invoiceStructured, ...structuredData };
 
       // Update processing state
       processedFileCount++;
@@ -500,7 +498,6 @@ async function processFiles(
 
     // Process delivery order files
     let deliveryOrderText = "";
-    let deliveryOrderStructured: Record<string, any> = {};
     for (const file of deliveryOrderFiles) {
       // Update processing state
       const fileIndex = processingState.files.findIndex(
@@ -512,7 +509,7 @@ async function processFiles(
       processingState.currentOcrFile = file.originalname;
 
       // Process the file
-      const { text, structuredData, error } = await ocrService.extractText(
+      const { text, error } = await ocrService.extractText(
         file.path
       );
       
@@ -520,12 +517,8 @@ async function processFiles(
         throw new Error(`OCR error: ${error}`);
       }
 
-      // Update processed text and structured data
+      // Update processed text
       deliveryOrderText += text + "\n\n";
-      deliveryOrderStructured = {
-        ...deliveryOrderStructured,
-        ...structuredData,
-      };
 
       // Update processing state
       processedFileCount++;
@@ -545,8 +538,6 @@ async function processFiles(
     const comparisonResult = await matcherService.compareDocuments(
       invoiceText,
       deliveryOrderText,
-      invoiceStructured,
-      deliveryOrderStructured,
       invoiceFiles[0].originalname,
       deliveryOrderFiles[0].originalname
     );

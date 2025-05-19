@@ -422,3 +422,20 @@ function getStatusColor(status: string): string {
       return 'FFFFFFFF'; // White
   }
 }
+
+/**
+ * Get a special and normalized product string
+ * @param str The product string to normalize
+ * @returns The normalized product string
+ */
+export function normalizeProductString(str: string): string {
+  return str
+    .toLowerCase()                                                            // Parse to lower
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")                         // remove accents
+    .replace(/(\d+)\s?ml/g, "$1")                                             // 600 ml -> 600
+    .replace(/(\d+(\.\d+)?)\s?l\b/g, (_, val) => `${parseFloat(val) * 1000}`) // 0.6L -> 600
+    .replace(/\bp\b|\bpz\b|\s+de\s+|\s+con\s+/g, "")
+    .replace(/[^a-z0-9]+/g, " ")                                              // Remove special characters
+    .trim()                                          // optional: sort words
+}
+
