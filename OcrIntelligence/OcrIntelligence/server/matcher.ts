@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { OcrService } from "./ocr";
 import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types";
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 /**
  * Service for comparing invoices against delivery orders using AI
@@ -33,21 +36,19 @@ export class MatcherService {
   async compareDocuments(
     invoiceText: string,
     deliveryOrderText: string,
-    invoiceStructured: Record<string, any>,
-    deliveryOrderStructured: Record<string, any>,
     invoiceFilename: string,
     deliveryOrderFilename: string
   ): Promise<ComparisonResult> {
     try {
       // Prepare the prompt for OpenAI
-      const prompt = this.buildComparisonPrompt(
+
+      const prompt = this.buildProductExtractionPrompt(
         invoiceText,
-        deliveryOrderText,
-        invoiceStructured,
-        deliveryOrderStructured
+        deliveryOrderText
       );
 
       // Make the API call to OpenAI
+
       const response = await this.callOpenAI(prompt);
 
       // Parse and process the response
@@ -62,8 +63,7 @@ export class MatcherService {
     } catch (error) {
       console.error("AI comparison error:", error);
       throw new Error(
-        `AI comparison failed: ${
-          error instanceof Error ? error.message : String(error)
+        `AI comparison failed: ${error instanceof Error ? error.message : String(error)
         }`
       );
     }
@@ -116,67 +116,67 @@ export class MatcherService {
   /**
    * Build a detailed prompt for the AI to compare documents
    */
-  private buildComparisonPrompt(
+  private buildProductExtractionPrompt(
     invoiceText: string,
-    deliveryOrderText: string,
-    invoiceStructured: Record<string, any>,
-    deliveryOrderStructured: Record<string, any>
+    deliveryOrderText: string
   ): string {
     return `
-Compare the following invoice against the delivery order and identify any discrepancies.
-Pay special attention to product names, quantities, prices, and other important details.
-
-Apply the following rules:
-1. If an item quantity is listed in different units (e.g., "1 caja" vs "24 unidades"), try to determine if they are equivalent based on any conversion information in the text.
-2. Use fuzzy matching for product names to identify the same product even if the descriptions differ slightly.
-3. Check dates, numbers, and other metadata for discrepancies.
-
-INVOICE TEXT:
-${invoiceText}
-
-DELIVERY ORDER TEXT:
-${deliveryOrderText}
-
-INVOICE STRUCTURED DATA:
-${JSON.stringify(invoiceStructured, null, 2)}
-
-DELIVERY ORDER STRUCTURED DATA:
-${JSON.stringify(deliveryOrderStructured, null, 2)}
-
-Respond with a JSON object with the following structure:
-{
-  "items": [
-    {
-      "productName": "Product name",
-      "invoiceValue": "Value in invoice (e.g., '10 units')",
-      "deliveryOrderValue": "Value in delivery order (e.g., '10 units')",
-      "status": "match|warning|error",
-      "note": "Optional explanation of any discrepancies or conversions"
-    }
-  ],
-  "metadata": [
-    {
-      "field": "Field name (e.g., 'Date', 'Invoice Number')",
-      "invoiceValue": "Value in invoice",
-      "deliveryOrderValue": "Value in delivery order",
-      "status": "match|warning|error"
-    }
-  ],
-  "summary": {
-    "matches": 0,
-    "warnings": 0,
-    "errors": 0
+  You will receive two raw text blocks: one from an invoice and one from a delivery order.
+  
+  Create two lists of products (invoiceList and deliveryOrderList) with the two text inputs with the following structure:
+  {
+    "productName": "Product name",
+    "quantity": "Quantity of the product",
   }
-}
 
-For status:
-- Use "match" when values are identical or equivalent after conversion.
-- Use "warning" when values might be equivalent but require attention (e.g., different units, slightly different product names).
-- Use "error" when there's a clear discrepancy.
+  You have to normalize the unit to milliliters or grams if any. 
+  The input text will sometimes be a bit messy, try to always associate 1 product with 1 quantity when you detect the column, a fifo in other words.
+  And if you found duplicates items by list, sum them.
 
-Only include fields that are present in at least one of the documents. Focus on important information like product details, quantities, dates, and reference numbers.
-`;
+  When you have the 2 processed list (invoiceList and deliveryOrderList), compare them and return a list of products with the following structure:
+  Return a JSON with the following structure:
+  {
+    "items": [
+      {
+        "productName": "Product name",
+        "invoiceValue": "Value in invoice (e.g., '3 caja')",
+        "deliveryOrderValue": "Value in delivery order (e.g., '3 caja')",
+        "status": "match|warning|error",
+        "note": "Optional explanation of any discrepancies or conversions"
+      }
+    ],
+    "metadata": [
+       {
+        "field": "Field name (e.g., 'Date', 'Invoice Number')",
+        "invoiceValue": "Value in invoice",
+        "deliveryOrderValue": "Value in delivery order",
+        "status": "match|warning|error"
+      }
+    ],
+    "summary": {
+      "matches": 0,
+      "warnings": 0,
+      "errors": 0
+    }
   }
+  
+  Guidelines:
+  - Focus **only** on product lines.
+  - Consider discrepancies in product name, quantity, and unit (e.g., caja, piezas).
+  - Use fuzzy matching for slightly different names (e.g., "agua min 1000 12p" vs "agua mineral 1000ml").
+  - Match products even if formatting varies or if units need conversion (e.g., "1 caja" vs "12 piezas").
+  - Ignore all metadata and document headers or footers.
+  
+  INVOICE TEXT:
+  ${invoiceText}
+  
+  DELIVERY ORDER TEXT:
+  ${deliveryOrderText}
+  
+  Return only the JSON object. Do not include explanations or any additional text.
+  `;
+  }
+
 
   /**
    * Format the AI response into our application's result structure
@@ -193,31 +193,31 @@ Only include fields that are present in at least one of the documents. Focus on 
     // Ensure the AI result has all required fields
     const items: ResultItem[] = Array.isArray(aiResult.items)
       ? aiResult.items.map((item: any) => ({
-          productName: item.productName || "Unknown Product",
-          invoiceValue: item.invoiceValue || "",
-          deliveryOrderValue: item.deliveryOrderValue || "",
-          status: this.validateStatus(item.status),
-          note: item.note || "",
-        }))
+        productName: item.productName || "Unknown Product",
+        invoiceValue: item.invoiceValue || "",
+        deliveryOrderValue: item.deliveryOrderValue || "",
+        status: this.validateStatus(item.status),
+        note: item.note || "",
+      }))
       : [];
 
     const metadata: MetadataItem[] = Array.isArray(aiResult.metadata)
       ? aiResult.metadata.map((meta: any) => ({
-          field: meta.field || "Unknown Field",
-          invoiceValue: meta.invoiceValue || "",
-          deliveryOrderValue: meta.deliveryOrderValue || "",
-          status: this.validateStatus(meta.status),
-        }))
+        field: meta.field || "Unknown Field",
+        invoiceValue: meta.invoiceValue || "",
+        deliveryOrderValue: meta.deliveryOrderValue || "",
+        status: this.validateStatus(meta.status),
+      }))
       : [];
 
     // Calculate summary if not provided or to ensure correctness
     const summary = {
-      matches: items.filter((item) => item.status === "match").length + 
-               metadata.filter((meta) => meta.status === "match").length,
+      matches: items.filter((item) => item.status === "match").length +
+        metadata.filter((meta) => meta.status === "match").length,
       warnings: items.filter((item) => item.status === "warning").length +
-                metadata.filter((meta) => meta.status === "warning").length,
+        metadata.filter((meta) => meta.status === "warning").length,
       errors: items.filter((item) => item.status === "error").length +
-              metadata.filter((meta) => meta.status === "error").length,
+        metadata.filter((meta) => meta.status === "error").length,
     };
 
     return {
@@ -244,8 +244,8 @@ Only include fields that are present in at least one of the documents. Focus on 
    */
   private validateStatus(status: string): "match" | "warning" | "error" {
     const validStatuses = ["match", "warning", "error"];
-    return validStatuses.includes(status) 
-      ? (status as "match" | "warning" | "error") 
+    return validStatuses.includes(status)
+      ? (status as "match" | "warning" | "error")
       : "error";
   }
 }
@@ -255,13 +255,13 @@ Only include fields that are present in at least one of the documents. Focus on 
  */
 export function getMatcherService(): MatcherService {
   const apiKey = process.env.OPENAI_KEY || '';
-  const model = process.env.OPENAI_MODEL || 'gpt-4o';
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   const useFallback = process.env.OPENAI_USE_FALLBACK !== 'false';
-  
+
   if (!apiKey) {
     console.warn("OPENAI_KEY environment variable is not set");
   }
-  
+
   return new MatcherService(apiKey, model, 'gpt-4o-mini', useFallback);
 }
 
