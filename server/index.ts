@@ -65,7 +65,8 @@ app.use((req, res, next) => {
   const port = 3000;
   
   server.listen(port, "0.0.0.0", () => {
-    log("serving on port 3000");
+    log(`serving on port ${port}`);
+    log("Aplicación OCR Intelligence lista para usar");
   });
 
 })();
