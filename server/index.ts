@@ -59,14 +59,13 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 3000;
+  // Usar la variable de entorno PORT o el puerto 3000 como valor predeterminado
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   
   server.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
+    log(`Servidor OCR Intelligence iniciado en puerto ${port}`);
     log("Aplicación OCR Intelligence lista para usar");
+    log(`Acceda a la aplicación a través de la pestaña WebView o en http://localhost:${port}`);
   });
 
 })();

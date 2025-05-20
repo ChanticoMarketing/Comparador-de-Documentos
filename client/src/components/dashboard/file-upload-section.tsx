@@ -46,7 +46,9 @@ export function FileUploadSection() {
         title: "Archivos subidos correctamente",
         description: "Se ha iniciado el procesamiento de los documentos",
       });
+      // Invalidar tanto las comparaciones como el estado de procesamiento
       queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] });
     },
     onError: (error: Error) => {
       toast({

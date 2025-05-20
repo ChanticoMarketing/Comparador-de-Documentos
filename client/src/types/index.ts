@@ -20,6 +20,8 @@ export interface ProcessingStatus {
   aiProgress: number;
   currentOcrFile?: string;
   files?: ProcessingFile[];
+  isProcessing: boolean;  // Indica si hay un procesamiento activo en curso
+  error?: string;         // Error opcional si algo salió mal
 }
 
 // Item in the comparison result

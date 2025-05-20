@@ -10,12 +10,11 @@ import { ProcessingStatus, FileStatus } from "@/types";
 export function ProcessingSection() {
   const { toast } = useToast();
 
+  // Usamos una consulta tipada correctamente
   const { data: processingData, isLoading } = useQuery<ProcessingStatus>({
     queryKey: ["/api/processing/status"],
-    refetchInterval: (data) => {
-      // Automatically refresh status every 2 seconds if processing is active
-      return data && (data.ocrProgress < 100 || data.aiProgress < 100) ? 2000 : false;
-    },
+    // Actualizar cada 2 segundos siempre para asegurar que tenemos datos actualizados
+    refetchInterval: 2000,
   });
 
   const cancelMutation = useMutation({
@@ -53,7 +52,23 @@ export function ProcessingSection() {
   };
 
   // If there's no active processing or it's completed, don't show this section
-  if (isLoading || !processingData || (processingData.ocrProgress === 100 && processingData.aiProgress === 100)) {
+  // Si no hay datos o están cargando, no mostrar nada
+  if (isLoading || !processingData) {
+    return null;
+  }
+  
+  // Si el procesamiento ha terminado (ambos progresos al 100%), no mostrar nada
+  if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
+    return null;
+  }
+  
+  // Solo mostrar si hay un procesamiento activo real (isProcessing debe ser true)
+  if (!processingData.isProcessing) {
+    return null;
+  }
+  
+  // Solo mostrar si hay archivos en procesamiento
+  if (!processingData.files || processingData.files.length === 0) {
     return null;
   }
 
@@ -73,7 +88,7 @@ export function ProcessingSection() {
           {/* OCR Progress */}
           <div>
             <div className="flex justify-between mb-2">
-              <span className="text-sm font-medium text-white">Extracción OCR</span>
+              <span className="text-sm font-medium text-white">Extracción de datos</span>
               <span className="text-sm font-medium text-white">{processingData.ocrProgress}%</span>
             </div>
             <Progress value={processingData.ocrProgress} variant="default" className="bg-gray-700" />
@@ -85,7 +100,7 @@ export function ProcessingSection() {
           {/* AI Analysis Progress */}
           <div>
             <div className="flex justify-between mb-2">
-              <span className="text-sm font-medium text-white">Análisis GPT-4.1</span>
+              <span className="text-sm font-medium text-white">Análisis Comparativo</span>
               <span className="text-sm font-medium text-white">{processingData.aiProgress}%</span>
             </div>
             <Progress value={processingData.aiProgress} variant="default" className="bg-gray-700" />

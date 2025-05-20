@@ -35,10 +35,19 @@ const processingState: ProcessingState = {
 
 // Configure multer for file uploads
 const createTempDir = (): string => {
+  // Usar un directorio temporal que funcione bien en Replit
   const tempDir = path.join(os.tmpdir(), "ocr-matcher-uploads");
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
+    
+    // En Replit, aseguramos que el directorio tenga permisos adecuados
+    try {
+      fs.chmodSync(tempDir, 0o777);
+    } catch (error) {
+      console.warn("No se pudieron establecer permisos en directorio temporal:", error);
+    }
   }
+  console.log("Directorio temporal para uploads:", tempDir);
   return tempDir;
 };
 
@@ -89,14 +98,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/settings", async (req: Request, res: Response) => {
     try {
       const settingsData = req.body as Settings;
-      const updatedSettings = await storage.saveSettings({
+      // Obtener configuración existente para mantener el ID si existe
+      const existingSettings = await storage.getSettings();
+      
+      const settingsToSave: any = {
         api4aiKey: settingsData.api4aiKey || "",
         openaiKey: settingsData.openaiKey || "",
         openaiModel: settingsData.openaiModel || "gpt-4o",
         fallbackToMiniModel: settingsData.fallbackToMiniModel || true,
         autoSaveResults: settingsData.autoSaveResults || false,
         maxFileSize: settingsData.maxFileSize || 10,
-      });
+      };
+      
+      // Si hay configuración existente, usar su ID
+      if (existingSettings && existingSettings.id) {
+        settingsToSave.id = existingSettings.id;
+      }
+      
+      const updatedSettings = await storage.saveSettings(settingsToSave);
       
       // Update environment variables for keys
       if (settingsData.api4aiKey) {
@@ -181,16 +200,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Start processing in the background
         processFiles(files.invoices, files.deliveryOrders, session.id).catch(
           (error) => {
-            console.error("Error processing files:", error);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("Error processing files:", errorMsg);
             processingState.isProcessing = false;
-            processingState.error = `Error processing files: ${error.message}`;
+            processingState.error = `Error processing files: ${errorMsg}`;
             // Update session status to error
             storage.updateSessionStatus(
               session.id,
               "error",
-              error.message
+              errorMsg
             ).catch((err) => {
-              console.error("Error updating session status:", err);
+              const errMsg = err instanceof Error ? err.message : String(err);
+              console.error("Error updating session status:", errMsg);
             });
           }
         );
@@ -212,12 +233,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get processing status
   app.get("/api/processing/status", (req: Request, res: Response) => {
-    // Return the current processing state
+    // Limpiamos el estado cuando no hay procesamiento activo
+    if (!processingState.isProcessing) {
+      // Si no hay procesamiento activo, enviamos un estado limpio
+      const cleanStatus: ProcessingStatus = {
+        ocrProgress: 0,
+        aiProgress: 0,
+        isProcessing: false,
+        files: [], // No mostramos archivos cuando no hay procesamiento
+      };
+      return res.json(cleanStatus);
+    }
+    
+    // Return the current processing state cuando hay procesamiento activo
     const status: ProcessingStatus = {
       ocrProgress: processingState.ocrProgress,
       aiProgress: processingState.aiProgress,
       currentOcrFile: processingState.currentOcrFile,
       files: processingState.files,
+      isProcessing: processingState.isProcessing,
+      error: processingState.error,
     };
     return res.json(status);
   });
@@ -474,13 +509,17 @@ async function processFiles(
       processingState.currentOcrFile = file.originalname;
 
       // Process the file
+      console.log(`Procesando archivo de factura: ${file.originalname} (${file.path})`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
       
       if (error) {
+        console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
         throw new Error(`OCR error: ${error}`);
       }
+      
+      console.log(`Texto extraído de la factura ${file.originalname}: ${text.substring(0, 100)}...`);
 
       // Update processed text
       invoiceText += text + "\n\n";
@@ -509,13 +548,17 @@ async function processFiles(
       processingState.currentOcrFile = file.originalname;
 
       // Process the file
+      console.log(`Procesando archivo de orden de entrega: ${file.originalname} (${file.path})`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
       
       if (error) {
+        console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
         throw new Error(`OCR error: ${error}`);
       }
+      
+      console.log(`Texto extraído de orden de entrega ${file.originalname}: ${text.substring(0, 100)}...`);
 
       // Update processed text
       deliveryOrderText += text + "\n\n";
@@ -532,21 +575,47 @@ async function processFiles(
     }
 
     // Start AI analysis
-    processingState.aiProgress = 10;
+    processingState.aiProgress = 5;
+    
+    // Iniciar una simulación de progreso gradual mientras se procesa el análisis real
+    // Esto proporciona feedback visual al usuario mientras el proceso real ocurre
+    let currentProgress = 5;
+    const progressInterval = setInterval(() => {
+      // Incrementar gradualmente hasta 70% mientras el análisis real ocurre
+      if (currentProgress < 70) {
+        currentProgress += 5;
+        processingState.aiProgress = currentProgress;
+        console.log(`Actualizando progreso de IA simulado: ${currentProgress}%`);
+      }
+    }, 1000);
+    
+    let comparisonResult;
+    try {
+      // Perform comparison
+      comparisonResult = await matcherService.compareDocuments(
+        invoiceText,
+        deliveryOrderText,
+        invoiceFiles[0].originalname,
+        deliveryOrderFiles[0].originalname
+      );
+      
+      // Detener la simulación de progreso
+      clearInterval(progressInterval);
+      
+      // Update AI progress to near complete
+      processingState.aiProgress = 90;
+    } catch (error) {
+      // Detener la simulación de progreso en caso de error
+      clearInterval(progressInterval);
+      throw error;
+    }
 
-    // Perform comparison
-    const comparisonResult = await matcherService.compareDocuments(
-      invoiceText,
-      deliveryOrderText,
-      invoiceFiles[0].originalname,
-      deliveryOrderFiles[0].originalname
-    );
-
-    // Update AI progress
-    processingState.aiProgress = 90;
-
-    // Save comparison result
-    await storage.saveComparisonResult(sessionId, comparisonResult);
+    if (comparisonResult) {
+      // Save comparison result
+      await storage.saveComparisonResult(sessionId, comparisonResult);
+    } else {
+      throw new Error("No se pudo generar el resultado de la comparación");
+    }
 
     // Update AI progress to complete
     processingState.aiProgress = 100;

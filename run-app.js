@@ -1,35 +1,35 @@
-// Script para iniciar la aplicación OCR Intelligence correctamente
-import { execSync } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
+// Script para iniciar la aplicación en Replit
+console.log("Iniciando OCR Intelligence en Replit...");
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Importar módulos necesarios usando ESM
+import { spawn } from 'child_process';
 
-console.log("Iniciando aplicación OCR Intelligence...");
-console.log("La aplicación estará disponible en la pestaña 'Webview' o en el puerto 3000");
+// Configurar puerto
+process.env.PORT = process.env.PORT || 4001;
 
-try {
-  // Verificar que server/index.ts existe
-  if (!fs.existsSync(path.join(process.cwd(), 'server', 'index.ts'))) {
-    throw new Error("No se encontró el archivo server/index.ts. Verificando estructura de carpetas...");
-  }
+// Función para iniciar el servidor
+function startServer() {
+  console.log(`Iniciando servidor en puerto ${process.env.PORT}...`);
   
-  // Ejecutar la aplicación
-  execSync('npx tsx server/index.ts', { stdio: 'inherit' });
-} catch (error) {
-  console.error("Error al iniciar la aplicación:", error.message);
+  const serverProcess = spawn('npx', ['tsx', 'server/index.ts'], {
+    stdio: 'inherit',
+    env: { ...process.env }
+  });
   
-  // Intentar localizar el archivo index.ts
-  console.log("Buscando archivo index.ts en otras carpetas...");
-  const result = execSync('find . -name "index.ts" | grep server').toString();
-  console.log("Archivos encontrados:", result);
+  serverProcess.on('error', (err) => {
+    console.error("Error iniciando el servidor:", err);
+    // Reintentar después de un breve retraso
+    setTimeout(startServer, 5000);
+  });
   
-  // Si encontramos archivos, sugerir comando correcto
-  if (result) {
-    console.log("Por favor, intenta ejecutar la aplicación con uno de los comandos sugeridos:");
-    result.split('\n').filter(Boolean).forEach(file => {
-      console.log(`npx tsx ${file}`);
-    });
-  }
+  serverProcess.on('exit', (code) => {
+    if (code !== 0) {
+      console.error(`El servidor terminó con código ${code}. Reiniciando...`);
+      // Reintentar después de un breve retraso
+      setTimeout(startServer, 5000);
+    }
+  });
 }
+
+// Iniciar el servidor
+startServer();
