@@ -15,11 +15,12 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
   const { toast } = useToast();
 
-  const { data, isLoading, error } = useQuery<ComparisonResult>({
+  const { data, isLoading, error, isSuccess } = useQuery<ComparisonResult>({
     queryKey: comparisonId 
       ? [`/api/comparisons/${comparisonId}`]
       : ["/api/comparisons/latest"],
-    enabled: true, // Only fetch if we have a comparison to show
+    enabled: true, // Siempre activado para detectar automáticamente nuevos resultados
+    refetchOnWindowFocus: true, // Actualizar cuando la ventana recupere el foco
   });
 
   const saveResultsMutation = useMutation({
@@ -162,7 +163,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   };
 
   return (
-    <Card className="mt-6 bg-gray-800 border-gray-700">
+    <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
         <CardTitle className="text-lg font-medium text-white">
           Resultados de la comparación

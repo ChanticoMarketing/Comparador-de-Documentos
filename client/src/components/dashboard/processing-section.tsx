@@ -59,6 +59,35 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
     },
   });
 
+  // IMPORTANTE: Todos los hooks deben llamarse incondicionalmente en el nivel superior
+  // antes de cualquier return o condicional
+  
+  // Efecto para detectar la finalización del procesamiento y actualizar resultados automáticamente
+  // colocado AQUÍ para cumplir con las reglas de Hooks de React
+  useEffect(() => {
+    // Solo ejecutar la lógica interna del efecto si tenemos datos
+    if (processingData) {
+      // Si procesamiento completo, actualizar resultados automáticamente
+      if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
+        // Pequeño delay para asegurar que el backend haya terminado de guardar
+        const timer = setTimeout(() => {
+          // Invalidar cache de resultados para forzar refetch
+          queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
+          console.log('Procesamiento completado: Actualizando resultados automáticamente');
+          
+          // Si ya no está procesando, también actualizar estado general
+          if (!processingData.isProcessing) {
+            queryClient.invalidateQueries({ queryKey: ['/api/processing/status'] });
+          }
+        }, 800);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+    // No hacer nada si no hay datos
+    return undefined;
+  }, [processingData, queryKey]); // Dependencias correctas, incluyendo queryKey
+  
   const handleCancelProcess = () => {
     cancelMutation.mutate();
   };
@@ -88,26 +117,6 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
     );
   }
   
-  // Efecto para detectar la finalización del procesamiento y actualizar resultados automáticamente
-  useEffect(() => {
-    // Si procesamiento completo, actualizar resultados automáticamente
-    if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
-      // Pequeño delay para asegurar que el backend haya terminado de guardar
-      const timer = setTimeout(() => {
-        // Invalidar cache de resultados para forzar refetch
-        queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
-        console.log('Procesamiento completado: Actualizando resultados automáticamente');
-        
-        // Si ya no está procesando, también actualizar estado general
-        if (!processingData.isProcessing) {
-          queryClient.invalidateQueries({ queryKey: ['/api/processing/status'] });
-        }
-      }, 800);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [processingData.ocrProgress, processingData.aiProgress, processingData.isProcessing]);
-
   // Si el procesamiento ha finalizado, mostrar un mensaje y un botón para ver los resultados
   if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
     return (

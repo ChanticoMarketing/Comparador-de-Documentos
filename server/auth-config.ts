@@ -19,18 +19,24 @@ const pgStoreConfig = {
 
 /**
  * Configuración de la sesión para Express
+ * Optimizada para persistencia robusta y mejor manejo de sesiones
  */
 const sessionConfig = {
   store: new PgSession(pgStoreConfig),
   secret: process.env.SESSION_SECRET || 'ocr-matcher-secret-key',
-  resave: true,
+  // Evita guardar la sesión si no se modificó
+  resave: false,
+  // Permite mantener la sesión "viva" con cada petición
   rolling: true,
-  saveUninitialized: true,
+  // Solo guarda sesiones iniciadas (mejora rendimiento y seguridad)
+  saveUninitialized: false,
+  name: 'ocr-matcher.sid', // Nombre personalizado para evitar fingerprinting
   cookie: {
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días (más razonable)
     httpOnly: true,
-    secure: false, // Cambiar a true en producción
-    sameSite: 'lax' as const
+    secure: process.env.NODE_ENV === 'production', // Solo seguro en producción
+    sameSite: 'lax' as const,
+    path: '/' // Asegura que la cookie está disponible en toda la aplicación
   }
 };
 
