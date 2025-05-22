@@ -43,9 +43,9 @@ export function DashboardLayout({
       />
       
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="py-6 px-4 sm:px-6 lg:px-8">
-          {/* Header */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="py-6 px-4 sm:px-6 lg:px-8 flex flex-col flex-1 min-h-0">
+          {/* Header - fijo, no debe scrollear */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-gray-700">
             <div>
               <h1 className="text-2xl font-bold text-white">
@@ -64,8 +64,13 @@ export function DashboardLayout({
             )}
           </div>
           
-          {/* Page content */}
-          {children}
+          {/* Contenedor scrolleable para el contenido de la página */}
+          <div className="flex-1 min-h-0 overflow-y-auto mt-6">
+            {/* Contenedor para los resultados */}
+            <div id="results-section">
+              {children}
+            </div>
+          </div>
         </div>
       </main>
     </div>

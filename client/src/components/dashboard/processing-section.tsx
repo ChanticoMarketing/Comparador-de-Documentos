@@ -88,15 +88,30 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
     );
   }
   
+  // Efecto para detectar la finalización del procesamiento y actualizar resultados automáticamente
+  useEffect(() => {
+    // Si procesamiento completo, actualizar resultados automáticamente
+    if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
+      // Pequeño delay para asegurar que el backend haya terminado de guardar
+      const timer = setTimeout(() => {
+        // Invalidar cache de resultados para forzar refetch
+        queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
+        console.log('Procesamiento completado: Actualizando resultados automáticamente');
+        
+        // Si ya no está procesando, también actualizar estado general
+        if (!processingData.isProcessing) {
+          queryClient.invalidateQueries({ queryKey: ['/api/processing/status'] });
+        }
+      }, 800);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [processingData.ocrProgress, processingData.aiProgress, processingData.isProcessing]);
+
   // Si el procesamiento ha finalizado, mostrar un mensaje y un botón para ver los resultados
-  if (processingData.ocrProgress === 100 && processingData.aiProgress === 100 && !processingData.isProcessing) {
-    // Invalidar consultas para mostrar los resultados automáticamente
-    setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
-    }, 1000);
-    
+  if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
     return (
-      <Card className="border-green-500 border-2">
+      <Card className="border-green-500 border-2 mb-8">
         <CardContent className="pt-6">
           <div className="text-center py-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 mb-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -105,7 +120,12 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
             <h3 className="text-xl font-medium mb-2">¡Procesamiento completado!</h3>
             <p className="mb-4">La comparación de documentos ha finalizado correctamente.</p>
             <Button 
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] })}
+              onClick={() => {
+                // Forzar actualización de resultados
+                queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
+                // Hacer scroll a la sección de resultados
+                document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
               Ver resultados
@@ -126,29 +146,65 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
         </div>
       )}
       
-      {/* OCR Progress */}
+      {/* OCR Progress with enhanced feedback */}
       <div>
         <div className="flex justify-between mb-2">
           <span className="text-sm font-medium text-white">Extracción de datos</span>
           <span className="text-sm font-medium text-white">{processingData.ocrProgress}%</span>
         </div>
-        <Progress value={processingData.ocrProgress} variant="default" className="bg-gray-700" />
-        <div className="mt-2 text-xs text-gray-400">
-          {processingData.currentOcrFile ? `Procesando: ${processingData.currentOcrFile}` : "Esperando..."}
+        <Progress 
+          value={processingData.ocrProgress} 
+          variant="default" 
+          className={`bg-gray-700 ${processingData.ocrProgress > 0 && processingData.ocrProgress < 100 ? 'animate-pulse' : ''}`}
+        />
+        <div className="mt-2">
+          {processingData.ocrProgress > 0 && processingData.ocrProgress < 100 ? (
+            <div className="flex items-center text-xs">
+              <div className="mr-2 h-2 w-2 rounded-full bg-amber-400 animate-pulse"></div>
+              <span className="text-amber-300 font-medium">
+                {processingData.currentOcrFile 
+                  ? `Procesando: ${processingData.currentOcrFile}` 
+                  : "Extrayendo texto de los documentos..."}
+              </span>
+            </div>
+          ) : processingData.ocrProgress === 0 ? (
+            <span className="text-xs text-gray-400">Preparando documentos...</span>
+          ) : (
+            <div className="flex items-center text-xs">
+              <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
+              <span className="text-green-300 font-medium">Extracción de texto completada</span>
+            </div>
+          )}
         </div>
       </div>
       
-      {/* AI Analysis Progress */}
+      {/* AI Analysis Progress with enhanced feedback */}
       <div>
         <div className="flex justify-between mb-2">
           <span className="text-sm font-medium text-white">Análisis Comparativo</span>
           <span className="text-sm font-medium text-white">{processingData.aiProgress}%</span>
         </div>
-        <Progress value={processingData.aiProgress} variant="default" className="bg-gray-700" />
-        <div className="mt-2 text-xs text-gray-400">
-          {processingData.aiProgress > 0 
-            ? "Comparando elementos y detectando discrepancias" 
-            : "Esperando a que finalice el OCR..."}
+        <Progress 
+          value={processingData.aiProgress} 
+          variant="default" 
+          className={`bg-gray-700 ${processingData.aiProgress > 0 && processingData.aiProgress < 100 ? 'animate-pulse' : ''}`} 
+        />
+        <div className="mt-2">
+          {processingData.aiProgress > 0 && processingData.aiProgress < 100 ? (
+            <div className="flex items-center text-xs">
+              <div className="mr-2 h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
+              <span className="text-blue-300 font-medium">
+                {processingData.currentAiStage || "Comparando elementos y detectando discrepancias"}
+              </span>
+            </div>
+          ) : processingData.aiProgress === 0 ? (
+            <span className="text-xs text-gray-400">Esperando a que finalice el OCR...</span>
+          ) : (
+            <div className="flex items-center text-xs">
+              <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
+              <span className="text-green-300 font-medium">Análisis completado</span>
+            </div>
+          )}
         </div>
       </div>
       

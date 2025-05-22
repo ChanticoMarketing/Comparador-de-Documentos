@@ -19,6 +19,7 @@ interface ProcessingState {
   ocrProgress: number;
   aiProgress: number;
   currentOcrFile?: string;
+  currentAiStage?: string; // Etapa actual del procesamiento de IA (para mostrar en la UI)
   files: Array<{
     name: string;
     type: "invoice" | "deliveryOrder";
@@ -699,10 +700,31 @@ async function processFiles(
     // First, process all files with OCR
     const totalFiles = invoiceFiles.length + deliveryOrderFiles.length;
     let processedFileCount = 0;
+    
+    // Iniciar simulación de progreso OCR intermedio para proporcionar feedback
+    // durante el procesamiento de cada archivo (ya que puede tomar tiempo)
+    const updateOcrProgressGradually = (fileStartPercent: number, fileEndPercent: number) => {
+      let currentProgress = fileStartPercent;
+      const progressInterval = setInterval(() => {
+        // Incrementar gradualmente hasta casi el final del archivo
+        if (currentProgress < fileEndPercent - 5) {
+          currentProgress += 3;
+          state.ocrProgress = Math.min(currentProgress, 99); // Nunca llegar a 100 hasta completar realmente
+          console.log(`Actualizando progreso de OCR simulado: ${state.ocrProgress}% para bloque ${blockId || "principal"}`);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, 800);
+      
+      return () => {
+        clearInterval(progressInterval);
+      };
+    };
 
     // Process invoice files
     let invoiceText = "";
-    for (const file of invoiceFiles) {
+    for (let i = 0; i < invoiceFiles.length; i++) {
+      const file = invoiceFiles[i];
       // Update processing state
       const fileIndex = state.files.findIndex(
         (f) => f.name === file.originalname && f.type === "invoice"
@@ -711,12 +733,23 @@ async function processFiles(
         state.files[fileIndex].status = "processing";
       }
       state.currentOcrFile = file.originalname;
+      
+      // Calcular el progreso inicial y final para este archivo
+      const fileStartPercent = Math.floor((processedFileCount / totalFiles) * 100);
+      const fileEndPercent = Math.floor(((processedFileCount + 1) / totalFiles) * 100);
+      state.ocrProgress = fileStartPercent;
+      
+      // Iniciar simulación de progreso para este archivo
+      const stopProgress = updateOcrProgressGradually(fileStartPercent, fileEndPercent);
 
       // Process the file
       console.log(`Procesando archivo de factura: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
+      
+      // Detener la simulación de progreso
+      stopProgress();
       
       if (error) {
         console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
@@ -730,9 +763,7 @@ async function processFiles(
 
       // Update processing state
       processedFileCount++;
-      state.ocrProgress = Math.floor(
-        (processedFileCount / totalFiles) * 100
-      );
+      state.ocrProgress = fileEndPercent;
       if (fileIndex !== -1) {
         state.files[fileIndex].status = "completed";
       }
@@ -741,7 +772,8 @@ async function processFiles(
 
     // Process delivery order files
     let deliveryOrderText = "";
-    for (const file of deliveryOrderFiles) {
+    for (let i = 0; i < deliveryOrderFiles.length; i++) {
+      const file = deliveryOrderFiles[i];
       // Update processing state
       const fileIndex = state.files.findIndex(
         (f) => f.name === file.originalname && f.type === "deliveryOrder"
@@ -750,12 +782,23 @@ async function processFiles(
         state.files[fileIndex].status = "processing";
       }
       state.currentOcrFile = file.originalname;
+      
+      // Calcular el progreso inicial y final para este archivo
+      const fileStartPercent = Math.floor((processedFileCount / totalFiles) * 100);
+      const fileEndPercent = Math.floor(((processedFileCount + 1) / totalFiles) * 100);
+      state.ocrProgress = fileStartPercent;
+      
+      // Iniciar simulación de progreso para este archivo
+      const stopProgress = updateOcrProgressGradually(fileStartPercent, fileEndPercent);
 
       // Process the file
       console.log(`Procesando archivo de orden de entrega: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
+      
+      // Detener la simulación de progreso
+      stopProgress();
       
       if (error) {
         console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
@@ -769,9 +812,7 @@ async function processFiles(
 
       // Update processing state
       processedFileCount++;
-      state.ocrProgress = Math.floor(
-        (processedFileCount / totalFiles) * 100
-      );
+      state.ocrProgress = fileEndPercent;
       if (fileIndex !== -1) {
         state.files[fileIndex].status = "completed";
       }
@@ -781,17 +822,41 @@ async function processFiles(
     // Start AI analysis
     state.aiProgress = 5;
     
-    // Iniciar una simulación de progreso gradual mientras se procesa el análisis real
-    // Esto proporciona feedback visual al usuario mientras el proceso real ocurre
-    let currentProgress = 5;
-    const progressInterval = setInterval(() => {
-      // Incrementar gradualmente hasta 70% mientras el análisis real ocurre
-      if (currentProgress < 70) {
-        currentProgress += 5;
-        state.aiProgress = currentProgress;
-        console.log(`Actualizando progreso de IA simulado: ${currentProgress}% para bloque ${blockId || "principal"}`);
-      }
-    }, 1000);
+    // Define etapas claras del procesamiento de IA para mostrar progreso más detallado
+    const aiStages = [
+      { stage: "Inicializando análisis de IA", progress: 5 },
+      { stage: "Preparando datos para comparación", progress: 15 },
+      { stage: "Procesando texto de facturas", progress: 25 },
+      { stage: "Procesando texto de órdenes de entrega", progress: 35 },
+      { stage: "Extrayendo entidades y cantidades", progress: 45 },
+      { stage: "Aplicando análisis semántico", progress: 60 },
+      { stage: "Generando comparación detallada", progress: 75 },
+      { stage: "Finalizando el análisis", progress: 85 }
+    ];
+    
+    // Crear una función que avance por las etapas de forma gradual y realista
+    let currentStageIndex = 0;
+    
+    // Esta función actualiza el progreso y muestra la etapa actual al usuario
+    const updateAiProgressGradually = () => {
+      const progressInterval = setInterval(() => {
+        if (currentStageIndex < aiStages.length) {
+          const currentStage = aiStages[currentStageIndex];
+          state.aiProgress = currentStage.progress;
+          // Guardar también el nombre de la etapa actual para mostrarla al usuario
+          state.currentAiStage = currentStage.stage;
+          console.log(`[AI] Etapa: ${currentStage.stage}, Progreso: ${currentStage.progress}% para bloque ${blockId || "principal"}`);
+          currentStageIndex++;
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, 1200); // Intervalos más largos para que el usuario pueda leer cada etapa
+      
+      return () => clearInterval(progressInterval);
+    };
+    
+    // Iniciar la simulación de progreso por etapas
+    const stopAiProgress = updateAiProgressGradually();
     
     let comparisonResult;
     try {
@@ -804,13 +869,14 @@ async function processFiles(
       );
       
       // Detener la simulación de progreso
-      clearInterval(progressInterval);
+      stopAiProgress();
       
       // Update AI progress to near complete
       state.aiProgress = 90;
+      state.currentAiStage = "Finalizando y guardando resultados";
     } catch (error) {
       // Detener la simulación de progreso en caso de error
-      clearInterval(progressInterval);
+      stopAiProgress();
       throw error;
     }
 

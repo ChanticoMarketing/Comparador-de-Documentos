@@ -19,6 +19,7 @@ export interface ProcessingStatus {
   ocrProgress: number;
   aiProgress: number;
   currentOcrFile?: string;
+  currentAiStage?: string; // Etapa actual del procesamiento de IA (para mostrar en la UI)
   files?: ProcessingFile[];
   isProcessing: boolean;  // Indica si hay un procesamiento activo en curso
   error?: string;         // Error opcional si algo salió mal
