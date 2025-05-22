@@ -55,9 +55,15 @@ export interface ResultSummary {
 // Complete comparison result
 export interface ComparisonResult {
   id: string;
+  userId?: number;
+  sessionId: number;
   invoiceFilename: string;
   deliveryOrderFilename: string;
   createdAt: string;
+  matchCount: number;
+  warningCount: number;
+  errorCount: number;
+  isPermanent?: boolean;
   summary: ResultSummary;
   items: ResultItem[];
   metadata: MetadataItem[];

@@ -86,7 +86,7 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
     }
     // No hacer nada si no hay datos
     return undefined;
-  }, [processingData, queryKey]); // Dependencias correctas, incluyendo queryKey
+  }, [processingData, queryKey, processingData?.ocrProgress, processingData?.aiProgress, processingData?.isProcessing]); // Dependencias completas para evitar warnings de exhaustividad
   
   const handleCancelProcess = () => {
     cancelMutation.mutate();

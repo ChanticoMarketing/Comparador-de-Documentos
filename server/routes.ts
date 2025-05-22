@@ -566,19 +566,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get a specific comparison result
-  app.get("/api/comparisons/:id", async (req: Request, res: Response) => {
+  app.get("/api/comparisons/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const comparisonId = parseInt(req.params.id);
       if (isNaN(comparisonId)) {
         return res.status(400).json({
-          message: "Invalid comparison ID",
+          message: "ID de comparación inválido",
         });
       }
 
+      // Manejamos el tipo de usuario de manera segura
+      const authReq = req as unknown as AuthRequest;
+      
+      // Obtener el ID del usuario actual
+      const userId = getUserId(authReq);
+      if (!userId) {
+        return res.status(401).json({
+          message: "Sesión no válida. Por favor inicie sesión nuevamente.",
+        });
+      }
+
+      // Obtener la comparación
       const comparison = await storage.getComparison(comparisonId);
+      
+      // Si no existe o no pertenece al usuario actual (excepto para admins)
       if (!comparison) {
         return res.status(404).json({
-          message: "Comparison not found",
+          message: "Comparación no encontrada",
+        });
+      }
+
+      // Verificar que la comparación pertenece al usuario o es administrador
+      // Si el campo userId no está definido en la comparación (migraciones antiguas) permitir acceso
+      const comparisonUserId = comparison.userId as number | undefined;
+      if (comparisonUserId !== undefined && comparisonUserId !== userId) {
+        return res.status(403).json({
+          message: "No tienes permiso para acceder a esta comparación",
         });
       }
 

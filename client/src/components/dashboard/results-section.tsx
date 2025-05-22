@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ComparisonResult, ResultItem, ResultTab } from "@/types";
+import { ComparisonResult, ResultItem, MetadataItem, ResultTab } from "@/types";
 
 interface ResultsSectionProps {
   comparisonId?: string;
@@ -108,8 +108,45 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   };
 
   // If there's no result data, don't show this section
-  if (isLoading || error || !data) {
-    return null;
+  if (isLoading) {
+    return (
+      <Card className="mt-6 bg-gray-800 border-gray-700">
+        <CardHeader className="border-b border-gray-700">
+          <CardTitle className="text-lg font-medium text-white">
+            Cargando resultados...
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            Obteniendo detalles de la comparación
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 flex justify-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  if (error || !data) {
+    return (
+      <Card className="mt-6 bg-gray-800 border-gray-700">
+        <CardHeader className="border-b border-gray-700">
+          <CardTitle className="text-lg font-medium text-white">
+            Error al cargar resultados
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            No se pudieron obtener los detalles de la comparación
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="bg-red-900 bg-opacity-20 border border-red-800 rounded-lg p-6">
+            <h3 className="text-lg font-medium text-red-300 mb-2">Error</h3>
+            <p className="text-red-200">
+              {error instanceof Error ? error.message : "Error desconocido al cargar los resultados de comparación."}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   // Function to get status class for highlighting differences
@@ -162,6 +199,78 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     }
   };
 
+  // Preparar los datos para visualización
+  // Asegurarnos de que tenemos ítems y metadata aunque vengan en formato diferente
+  const items = data.items || [];
+  
+  // Preparar el resumen
+  let summary = data.summary;
+  
+  // Si no hay summary pero tenemos datos en matchCount, warningCount y errorCount, crear un resumen
+  if (!summary && data.matchCount !== undefined) {
+    summary = {
+      matches: data.matchCount,
+      warnings: data.warningCount,
+      errors: data.errorCount
+    };
+  }
+  
+  // Si aún no hay summary, intentar extraerlo del rawData
+  if (!summary && data.rawData) {
+    try {
+      const rawData = typeof data.rawData === 'string' 
+        ? JSON.parse(data.rawData) 
+        : data.rawData;
+        
+      if (rawData.summary) {
+        summary = rawData.summary;
+      }
+    } catch (e) {
+      console.error('Error parsing rawData summary:', e);
+    }
+  }
+  
+  // Si todavía no hay summary, crear uno por defecto
+  if (!summary) {
+    summary = {
+      matches: 0,
+      warnings: 0,
+      errors: 0
+    };
+  }
+  
+  // Si los datos vienen del raw_data, intentar extraer metadata
+  let metadata = data.metadata || [];
+  if (metadata.length === 0 && data.rawData && typeof data.rawData === 'object') {
+    // Intentar extraer metadata del rawData si está disponible
+    try {
+      const rawData = typeof data.rawData === 'string' 
+        ? JSON.parse(data.rawData) 
+        : data.rawData;
+        
+      if (rawData.metadata) {
+        metadata = rawData.metadata;
+      }
+    } catch (e) {
+      console.error('Error parsing rawData:', e);
+    }
+  }
+
+  // Si no hay items pero hay rawData, intentar extraerlos de ahí
+  if (items.length === 0 && data.rawData) {
+    try {
+      const rawData = typeof data.rawData === 'string' 
+        ? JSON.parse(data.rawData) 
+        : data.rawData;
+        
+      if (rawData.items) {
+        items.push(...rawData.items);
+      }
+    } catch (e) {
+      console.error('Error parsing rawData items:', e);
+    }
+  }
+
   return (
     <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
@@ -185,7 +294,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Coincidencias</p>
-                <p className="text-xl font-semibold text-white">{data.summary.matches}</p>
+                <p className="text-xl font-semibold text-white">{summary.matches}</p>
               </div>
             </div>
           </div>
@@ -201,7 +310,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Advertencias</p>
-                <p className="text-xl font-semibold text-white">{data.summary.warnings}</p>
+                <p className="text-xl font-semibold text-white">{summary.warnings}</p>
               </div>
             </div>
           </div>
@@ -216,7 +325,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Discrepancias</p>
-                <p className="text-xl font-semibold text-white">{data.summary.errors}</p>
+                <p className="text-xl font-semibold text-white">{summary.errors}</p>
               </div>
             </div>
           </div>
@@ -282,7 +391,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {data.items.map((item, index) => (
+                  {items.map((item, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {item.productName}
@@ -330,7 +439,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {data.metadata.map((meta, index) => (
+                  {metadata.map((meta, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {meta.field}
