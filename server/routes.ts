@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getOcrService } from "./ocr";
 import { getMatcherService } from "./matcher";
+import { authService } from "./auth";
+import { isAuthenticated, AuthRequest, getUserId } from "./auth-config";
+import passport from "passport";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -65,6 +68,51 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Rutas de autenticación
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const newUser = await authService.registerUser(req.body);
+      res.status(201).json(newUser);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/auth/login", (req: Request, res: Response, next) => {
+    passport.authenticate("local", (err: Error, user: any) => {
+      if (err) {
+        return res.status(500).json({ message: "Error en el servidor" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+      
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          return res.status(500).json({ message: "Error al iniciar sesión" });
+        }
+        return res.status(200).json(user);
+      });
+    })(req, res, next);
+  });
+  
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error al cerrar sesión" });
+      }
+      res.status(200).json({ message: "Sesión cerrada correctamente" });
+    });
+  });
+  
+  app.get("/api/auth/me", (req: Request, res: Response) => {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      res.status(200).json(req.user);
+    } else {
+      res.status(401).json({ message: "No autenticado" });
+    }
+  });
 
   // Get application settings
   app.get("/api/settings", async (req: Request, res: Response) => {
@@ -208,10 +256,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Actualizar el estado principal para compatibilidad con código existente
         Object.assign(processingState, blockState);
 
+        // Obtener el ID del usuario si está autenticado
+        const userId = getUserId(req as AuthRequest) || undefined;
+        
         // Create a new session
         const session = await storage.createSession(
           files.invoices[0].originalname,
-          files.deliveryOrders[0].originalname
+          files.deliveryOrders[0].originalname,
+          userId
         );
         blockState.sessionId = session.id;
         processingState.sessionId = session.id;
@@ -763,8 +815,11 @@ async function processFiles(
     }
 
     if (comparisonResult) {
-      // Save comparison result
-      await storage.saveComparisonResult(sessionId, comparisonResult);
+      // Obtener la sesión para recuperar el userId
+      const session = await storage.getSession(sessionId);
+      
+      // Save comparison result con el userId si está disponible
+      await storage.saveComparisonResult(sessionId, comparisonResult, session?.userId || undefined);
     } else {
       throw new Error("No se pudo generar el resultado de la comparación");
     }

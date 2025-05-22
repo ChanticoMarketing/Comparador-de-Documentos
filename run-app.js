@@ -1,35 +1,30 @@
-// Script para iniciar la aplicación en Replit
-console.log("Iniciando OCR Intelligence en Replit...");
+const { spawn } = require('child_process');
+const path = require('path');
 
-// Importar módulos necesarios usando ESM
-import { spawn } from 'child_process';
-
-// Configurar puerto
-process.env.PORT = process.env.PORT || 4001;
-
-// Función para iniciar el servidor
-function startServer() {
-  console.log(`Iniciando servidor en puerto ${process.env.PORT}...`);
+// Inicia la aplicación en modo desarrollo
+function startApplication() {
+  console.log('Iniciando la aplicación OCR Intelligence...');
   
-  const serverProcess = spawn('npx', ['tsx', 'server/index.ts'], {
+  // Ejecutar el script de inicio que está configurado en package.json
+  const process = spawn('npm', ['run', 'dev'], {
+    cwd: path.resolve(__dirname, '../../..'),
     stdio: 'inherit',
-    env: { ...process.env }
+    shell: true
   });
   
-  serverProcess.on('error', (err) => {
-    console.error("Error iniciando el servidor:", err);
-    // Reintentar después de un breve retraso
-    setTimeout(startServer, 5000);
+  process.on('error', (error) => {
+    console.error('Error al iniciar la aplicación:', error);
   });
   
-  serverProcess.on('exit', (code) => {
+  process.on('close', (code) => {
     if (code !== 0) {
-      console.error(`El servidor terminó con código ${code}. Reiniciando...`);
-      // Reintentar después de un breve retraso
-      setTimeout(startServer, 5000);
+      console.error(`La aplicación se cerró con código: ${code}`);
+    } else {
+      console.log('Aplicación finalizada correctamente');
     }
   });
+  
+  return process;
 }
 
-// Iniciar el servidor
-startServer();
+module.exports = startApplication;

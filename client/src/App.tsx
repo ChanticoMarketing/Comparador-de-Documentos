@@ -6,25 +6,65 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import History from "@/pages/history";
 import Settings from "@/pages/settings";
+import Login from "@/pages/auth/login";
+import Register from "@/pages/auth/register";
 import { ThemeProvider } from "@/components/ui/theme-provider";
+import { AuthProvider, useAuth } from "@/contexts/auth";
+import MainLayout from "@/components/layout/MainLayout";
 
-function Router() {
+// Componente de rutas protegidas
+function AuthenticatedRoutes() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Si está cargando la autenticación, mostramos un spinner
+  if (isLoading) {
+    return <div className="flex justify-center items-center h-screen">Cargando...</div>;
+  }
+
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/history" component={History} />
-      <Route path="/settings" component={Settings} />
-      <Route component={NotFound} />
-    </Switch>
+    <MainLayout>
+      <Switch>
+        {/* Rutas públicas siempre accesibles */}
+        <Route path="/auth/login" component={Login} />
+        <Route path="/auth/register" component={Register} />
+        
+        {/* Rutas protegidas - solo accesibles si está autenticado */}
+        {isAuthenticated ? (
+          <>
+            <Route path="/" component={Dashboard} />
+            <Route path="/history" component={History} />
+            <Route path="/settings" component={Settings} />
+          </>
+        ) : (
+          // Redirigir a login si no está autenticado y no está en una ruta pública
+          <Route path="*">
+            {() => {
+              // Obtener la ubicación actual
+              const currentPath = window.location.pathname;
+              // Si ya está en una ruta de autenticación, no redirigir
+              if (!currentPath.includes('/auth/')) {
+                window.location.href = "/auth/login";
+              }
+              return null;
+            }}
+          </Route>
+        )}
+        
+        <Route component={NotFound} />
+      </Switch>
+    </MainLayout>
   );
 }
 
+// Aplicación principal
 function App() {
   return (
     <ThemeProvider defaultTheme="dark">
       <QueryClientProvider client={queryClient}>
-        <Router />
-        <Toaster />
+        <AuthProvider>
+          <AuthenticatedRoutes />
+          <Toaster />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

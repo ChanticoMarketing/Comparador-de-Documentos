@@ -23,9 +23,11 @@ export class StorageService {
    */
   async createSession(
     invoiceFilename: string,
-    deliveryOrderFilename: string
+    deliveryOrderFilename: string,
+    userId?: number
   ): Promise<Session> {
     const [session] = await db.insert(sessions).values({
+      userId,
       invoiceFilename,
       deliveryOrderFilename,
       status: "processing",
@@ -81,11 +83,13 @@ export class StorageService {
    */
   async saveComparisonResult(
     sessionId: number,
-    result: ComparisonResult
+    result: ComparisonResult,
+    userId?: number
   ): Promise<Comparison> {
     // First, create the comparison record
     const [comparison] = await db.insert(comparisons).values({
       sessionId,
+      userId,
       invoiceFilename: result.invoiceFilename,
       deliveryOrderFilename: result.deliveryOrderFilename,
       matchCount: result.summary.matches,
@@ -160,14 +164,24 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map(item => ({
+      items: comparison.items.map((item: {
+        productName: string;
+        invoiceValue: string;
+        deliveryOrderValue: string;
+        status: string;
+        note?: string;
+      }) => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map(meta => ({
+      metadata: comparison.metadata.map((meta: {
+        field: string;
+        invoiceValue: string;
+        deliveryOrderValue: string;
+      }) => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
