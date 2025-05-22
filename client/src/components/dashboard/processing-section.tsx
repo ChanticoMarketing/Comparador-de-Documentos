@@ -74,10 +74,8 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
     );
   }
   
-  // Si el procesamiento ha terminado o no está activo, no mostrar nada
-  if ((!processingData.isProcessing) || 
-      (processingData.ocrProgress === 100 && processingData.aiProgress === 100) || 
-      (!processingData.files || processingData.files.length === 0)) {
+  // Si no hay archivos o procesamiento en curso, no mostrar esta sección
+  if (!processingData.isProcessing && (!processingData.files || processingData.files.length === 0)) {
     return (
       <div className="text-center py-8 text-gray-400">
         <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
@@ -87,6 +85,34 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
         <h3 className="text-lg font-medium text-gray-200 mb-2">No hay procesamiento activo</h3>
         <p>No hay ningún proceso de comparación en ejecución en este momento.</p>
       </div>
+    );
+  }
+  
+  // Si el procesamiento ha finalizado, mostrar un mensaje y un botón para ver los resultados
+  if (processingData.ocrProgress === 100 && processingData.aiProgress === 100 && !processingData.isProcessing) {
+    // Invalidar consultas para mostrar los resultados automáticamente
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
+    }, 1000);
+    
+    return (
+      <Card className="border-green-500 border-2">
+        <CardContent className="pt-6">
+          <div className="text-center py-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 mb-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <h3 className="text-xl font-medium mb-2">¡Procesamiento completado!</h3>
+            <p className="mb-4">La comparación de documentos ha finalizado correctamente.</p>
+            <Button 
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] })}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              Ver resultados
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 

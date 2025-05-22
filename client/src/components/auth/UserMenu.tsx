@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { useAuth } from '@/contexts/auth';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,17 @@ import { UserIcon, Settings, LogOut, History } from 'lucide-react';
 
 const UserMenu = () => {
   const { user, isAuthenticated, logout, isLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  
+  // Este efecto asegura que el componente solo se renderice en el cliente
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Si no está montado, no renderizar nada para evitar discrepancias de hidratación
+  if (!mounted) {
+    return null;
+  }
 
   const handleLogout = async () => {
     try {

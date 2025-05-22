@@ -23,12 +23,13 @@ const pgStoreConfig = {
 const sessionConfig = {
   store: new PgSession(pgStoreConfig),
   secret: process.env.SESSION_SECRET || 'ocr-matcher-secret-key',
-  resave: false,
-  saveUninitialized: false,
+  resave: true,
+  rolling: true,
+  saveUninitialized: true,
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false, // Cambiar a true en producción
     sameSite: 'lax' as const
   }
 };
