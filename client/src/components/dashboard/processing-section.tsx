@@ -50,10 +50,11 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
       });
       queryClient.invalidateQueries({ queryKey });
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
       toast({
         title: "Error al cancelar el proceso",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -67,26 +68,50 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
   useEffect(() => {
     // Solo ejecutar la lógica interna del efecto si tenemos datos
     if (processingData) {
+      console.log("DIAGNÓSTICO: Estado de procesamiento actual:", {
+        ocrProgress: processingData.ocrProgress,
+        aiProgress: processingData.aiProgress,
+        isProcessing: processingData.isProcessing,
+        blockId: blockId,
+        tiempo: new Date().toISOString()
+      });
+      
       // Si procesamiento completo, actualizar resultados automáticamente
       if (processingData.ocrProgress === 100 && processingData.aiProgress === 100) {
+        console.log("DIAGNÓSTICO: ✅ PROCESO COMPLETADO DETECTADO EN FRONTEND. Invalidando queries...");
+        
         // Pequeño delay para asegurar que el backend haya terminado de guardar
+        // Aumentado de 800ms a 1500ms para dar más tiempo al backend
         const timer = setTimeout(() => {
-          // Invalidar cache de resultados para forzar refetch
+          console.log("DIAGNÓSTICO: 🔄 Ejecutando invalidación de cache para forzar recarga de resultados");
+          
+          // Invalidar caches explícitamente para forzar refresh completo
           queryClient.invalidateQueries({ queryKey: ['/api/comparisons/latest'] });
-          console.log('Procesamiento completado: Actualizando resultados automáticamente');
           
           // Si ya no está procesando, también actualizar estado general
           if (!processingData.isProcessing) {
             queryClient.invalidateQueries({ queryKey: ['/api/processing/status'] });
           }
-        }, 800);
+          
+          // Scroll a la sección de resultados para mostrarlos automáticamente
+          setTimeout(() => {
+            const resultsSection = document.getElementById('results-section');
+            if (resultsSection) {
+              console.log("DIAGNÓSTICO: Scrolling a sección de resultados automáticamente");
+              resultsSection.scrollIntoView({ behavior: 'smooth' });
+            } else {
+              console.log("DIAGNÓSTICO: No se encontró la sección de resultados para hacer scroll");
+            }
+          }, 500); // Dar tiempo adicional para que se renderice la sección de resultados
+          
+        }, 1500);
         
         return () => clearTimeout(timer);
       }
     }
     // No hacer nada si no hay datos
     return undefined;
-  }, [processingData, queryKey, processingData?.ocrProgress, processingData?.aiProgress, processingData?.isProcessing]); // Dependencias completas para evitar warnings de exhaustividad
+  }, [processingData, queryClient, queryKey]); // Dependencias simplificadas y correctas
   
   const handleCancelProcess = () => {
     cancelMutation.mutate();

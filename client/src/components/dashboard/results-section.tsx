@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ComparisonResult, ResultItem, MetadataItem, ResultTab } from "@/types";
@@ -15,13 +15,29 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
   const { toast } = useToast();
 
-  const { data, isLoading, error, isSuccess } = useQuery<ComparisonResult>({
+  // Opciones de consulta mejoradas para React Query
+  const queryOptions: UseQueryOptions<ComparisonResult, Error, ComparisonResult> = {
     queryKey: comparisonId 
       ? [`/api/comparisons/${comparisonId}`]
       : ["/api/comparisons/latest"],
     enabled: true, // Siempre activado para detectar automáticamente nuevos resultados
     refetchOnWindowFocus: true, // Actualizar cuando la ventana recupere el foco
-  });
+    staleTime: 5000, // Consideramos datos "frescos" por 5 segundos (reducido de Infinity por defecto)
+    refetchInterval: 10000, // Refrescar cada 10s para asegurar datos actualizados
+  };
+  
+  // Consulta con opciones tipadas correctamente
+  const { data, isLoading, error, isSuccess, isFetching } = useQuery<ComparisonResult, Error, ComparisonResult>(queryOptions);
+  
+  // Efecto para detectar y registrar actualizaciones de datos
+  useEffect(() => {
+    if (data) {
+      console.log("DIAGNÓSTICO: ResultsSection recibió datos actualizados:", { 
+        id: data.id,
+        time: new Date().toISOString()
+      });
+    }
+  }, [data]);
 
   const saveResultsMutation = useMutation({
     mutationFn: async () => {
@@ -50,10 +66,11 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
       toast({
         title: "Error al guardar los resultados",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -86,10 +103,11 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       
       return true;
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
       toast({
         title: "Error al exportar",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -391,7 +409,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {items.map((item, index) => (
+                  {items.map((item: any, index: number) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {item.productName}
@@ -439,7 +457,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {metadata.map((meta, index) => (
+                  {metadata.map((meta: any, index: number) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {meta.field}

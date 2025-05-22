@@ -1,0 +1,99 @@
+# **PROMPT DE INGENIERÍA AVANZADA PARA REPLIT AI AGENT: DIAGNÓSTICO Y CORRECCIÓN DE ACTUALIZACIÓN AUTOMÁTICA DE RESULTADOS POST-PROCESAMIENTO EN OCR-MATCHER AI (FASE DE DEPURACIÓN FOCALIZADA)**
+
+**ID de Contexto de Misión:** Restauración del Flujo de Datos en Tiempo Real para la Visualización de Resultados de Comparación.
+
+**Persona del Agente de IA (Replit AI Agent):**
+Actúa como un Ingeniero de Software Full-Stack especializado en la depuración de flujos de datos asíncronos entre backend (Node.js/Express) y frontend (React), con un dominio experto en la gestión de estado y caché de `@tanstack/react-query`. Tu misión es identificar y corregir la causa raíz por la cual los resultados de la comparación de documentos no se actualizan automáticamente en la interfaz de usuario tras la finalización del procesamiento en el backend.
+
+**Problema Crítico Específico a Resolver (Enfoque Único de este Prompt):**
+La aplicación no actualiza automáticamente la sección de resultados (`client/src/components/dashboard/results-section.tsx`) cuando el proceso de comparación de documentos (manejado en `server/routes.ts` dentro de la función `processFiles`) concluye. Esto obliga al usuario a refrescar la página, lo cual, debido a la implementación de autenticación, puede resultar en la pérdida de la sesión y la incapacidad de ver los resultados.
+
+**Objetivo Principal de Esta Intervención:**
+Diagnosticar con precisión por qué la invalidación de queries de `@tanstack/react-query` o el mecanismo de actualización de datos no está funcionando como se espera en `client/src/components/dashboard/processing-section.tsx` y/o en `client/src/components/dashboard/results-section.tsx`, e implementar la corrección necesaria para lograr la actualización automática y fluida de los resultados.
+
+**Restricción Inviolable Absoluta (Recordatorio Constante):**
+La lógica interna del motor de comparación (`server/ocr.ts` y `server/matcher.ts`) **NO DEBE SER MODIFICADA.** Las correcciones deben centrarse exclusivamente en el flujo de estado y datos del frontend y la comunicación con el backend para la actualización de la UI.
+
+---
+
+### **Directivas Detalladas para el Diagnóstico y Corrección:**
+
+**Paso 1: Análisis del Flujo de Estado en `ProcessingSection` y `ResultsSection`**
+
+* **Archivo Principal de Investigación:** `client/src/components/dashboard/processing-section.tsx`.
+    * **Verificar la Lógica del `useEffect`:**
+        * El `useEffect` que depende de `processingData` es el responsable de invalidar las queries cuando el proceso finaliza (`processingData?.ocrProgress === 100 && processingData.aiProgress === 100`).
+        * **Añadir Logs Detallados:** Dentro de este `useEffect`, justo antes de llamar a `queryClient.invalidateQueries`, añade `console.log` para verificar:
+            1.  Si la condición `(processingData?.ocrProgress === 100 && processingData.aiProgress === 100)` realmente se evalúa a `true` cuando el backend termina.
+            2.  El valor de `processingData` en ese momento.
+            3.  Confirmar que las llamadas a `queryClient.invalidateQueries({ queryKey: ["/api/comparisons/latest"] })` y `queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] })` se están ejecutando.
+            ```typescript
+            // En ProcessingSection, dentro del useEffect que observa processingData
+            React.useEffect(() => {
+              // console.log("ProcessingSection useEffect triggered. processingData:", processingData); // Log general
+              if (processingData?.ocrProgress === 100 && processingData.aiProgress === 100) {
+                console.log("PROCESO COMPLETADO DETECTADO EN FRONTEND. Invalidando queries..."); // Log específico
+                queryClient.invalidateQueries({ queryKey: ["/api/comparisons/latest"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] });
+              }
+              if (processingData?.error) {
+                // console.error("Error de procesamiento backend reportado:", processingData.error);
+                toast({
+                  title: "Error en el procesamiento Backend",
+                  description: processingData.error,
+                  variant: "destructive",
+                });
+                queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] });
+              }
+            }, [processingData, toast]); // 'toast' debe estar en las dependencias si se usa dentro.
+            ```
+    * **Verificar el Hook `useQuery` para `/api/processing/status`:**
+        * Asegurar que el `refetchInterval` esté configurado para activarse mientras el proceso no esté completo (ej. `return data && (data.ocrProgress < 100 || data.aiProgress < 100) ? 2000 : false;`).
+        * Observar en la pestaña "Network" de las herramientas de desarrollador si las peticiones a `/api/processing/status` se están realizando periódicamente y qué respuesta devuelve el backend, especialmente el último estado cuando el proceso ha terminado.
+
+* **Archivo de Investigación Secundario:** `client/src/components/dashboard/results-section.tsx`.
+    * **Verificar la Query Key:** La `useQuery` en este componente (para `/api/comparisons/latest` o `/api/comparisons/:id` si se navega desde historial) debe coincidir exactamente con la `queryKey` que se está invalidando en `ProcessingSection`.
+        * Actualmente es `queryKey: comparisonId ? [\`/api/comparisons/\${comparisonId}\`] : ["/api/comparisons/latest"]`. La invalidación en `ProcessingSection` es `queryClient.invalidateQueries({ queryKey: ["/api/comparisons/latest"] })`. Esto parece correcto para el caso del dashboard principal.
+    * **Opciones de `useQuery`:** Revisar `staleTime`, `cacheTime`. Por defecto, `staleTime: Infinity` significa que React Query no refetcheará automáticamente datos "stale" a menos que se invalide. La invalidación es la vía correcta aquí.
+
+**Paso 2: Análisis del Estado del Backend al Finalizar el Procesamiento**
+
+* **Archivo Principal de Investigación:** `server/routes.ts` (función `processFiles`).
+    * **Verificar la Actualización Final de `processingState`:**
+        * Asegurar que después de `await storage.saveComparisonResult(sessionId, comparisonResult);` (si `autoSaveResults` es true) y `await storage.updateSessionStatus(sessionId, "completed");`, el objeto `processingState` (que es global en este archivo) se actualice correctamente para reflejar que `ocrProgress` y `aiProgress` son 100 y que `isProcessing` es `false`.
+            ```typescript
+            // En server/routes.ts, al final de processFiles, dentro del try:
+            // ... (después de guardar y actualizar estado de sesión)
+            processingState.aiProgress = 100; // Ya está
+            processingState.ocrProgress = 100; // Asegurar que también se ponga a 100 si no lo está ya
+            processingState.isProcessing = false; // Ya está
+            processingState.currentOcrFile = undefined; // Limpiar archivo actual
+            // console.log("BACKEND: Proceso finalizado, estado:", processingState); // Log para depuración
+            ```
+        * El endpoint `/api/processing/status` devuelve este `processingState`. Si este estado no se limpia o no se marca como 100% completado correctamente, el frontend podría no detectar el final del proceso.
+
+**Paso 3: Posibles Causas y Correcciones**
+
+1.  **Latencia o Condición de Carrera Sutil:**
+    * El `useEffect` en `ProcessingSection` podría ejecutarse y ver `aiProgress === 100` *antes* de que `ResultsSection` haya tenido la oportunidad de refetchear con la query invalidada, o antes de que la *nueva* data de `/api/comparisons/latest` esté disponible (si hay alguna demora en la base de datos o en la propagación del guardado).
+    * **Solución Potencial:** Podrías añadir un pequeño delay artificial antes de ocultar `ProcessingSection` o usar el estado `isFetching` de la query `/api/comparisons/latest` en `ResultsSection` para mostrar un loader mientras carga los nuevos datos, en lugar de depender solo de que `ProcessingSection` desaparezca.
+
+2.  **Error en la Lógica de Invalidación o Query Keys:**
+    * Aunque parece correcto, una mínima diferencia en la `queryKey` (un typo, un slash extra/faltante) hará que la invalidación no afecte a la query deseada. Revisar con lupa.
+    * Confirmar que `queryClient` sea la misma instancia importada y usada en ambos componentes (`ProcessingSection` y `ResultsSection`). En este proyecto, parece que se importa de `@/lib/queryClient`, lo cual es correcto.
+
+3.  **Estado del Componente `Dashboard`:**
+    * El componente `client/src/pages/dashboard.tsx` renderiza `ProcessingSection` y `ResultsSection` sin pasarles props que puedan estar causando re-renders inesperados o que impidan la actualización. Actualmente, `ResultsSection` se llama sin `comparisonId`, lo que implica que siempre debería buscar el último.
+
+**Acciones Específicas Solicitadas al Agente de IA:**
+
+1.  **Implementar Logging Detallado:** Añadir los `console.log` sugeridos en `ProcessingSection` y `server/routes.ts` para trazar el flujo de estado.
+2.  **Analizar los Logs y la Pestaña Network:** Ejecutar una comparación y observar los logs de la consola del navegador y la pestaña Network para ver el timing de las actualizaciones de estado y las llamadas API.
+3.  **Verificar la Lógica de `useEffect` en `ProcessingSection`:** Asegurar que la condición para invalidar queries se cumpla y se ejecute *después* de que el backend haya completado *todas* sus operaciones, incluyendo el guardado en base de datos.
+4.  **Confirmar la Configuración de React Query:** Revisar si hay alguna configuración global en `queryClient` que pueda estar interfiriendo con la invalidación o el refetch inmediato (aunque `staleTime: Infinity` debería hacer que la invalidación sea la única forma de refetchear).
+5.  **Proponer e Implementar la Corrección:** Basado en el diagnóstico, aplicar la corrección más directa y segura. Esto podría implicar ajustar el `useEffect` en `ProcessingSection`, la forma en que `processingState` se actualiza en el backend, o cómo `ResultsSection` maneja su estado de carga.
+
+**Formato de Salida Esperado por el Agente:**
+Código fuente con las correcciones implementadas. Un resumen breve de la causa raíz identificada y la solución aplicada, preferiblemente como comentarios en el código modificado.
+
+---

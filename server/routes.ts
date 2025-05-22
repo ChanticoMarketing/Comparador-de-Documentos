@@ -922,8 +922,23 @@ async function processFiles(
     // Clean up processed files
     await ocrService.cleanupFiles(processedFiles);
 
-    // Reset processing state
+    // Reset processing state asegurando valores correctos
     state.isProcessing = false;
+    state.ocrProgress = 100;
+    state.aiProgress = 100;
+    state.currentOcrFile = undefined;
+    state.currentAiStage = "Procesamiento completado";
+    
+    console.log("BACKEND: Proceso finalizado completamente, estado actualizado:", {
+      sessionId,
+      blockId: blockId || "principal",
+      estado: {
+        isProcessing: state.isProcessing,
+        ocrProgress: state.ocrProgress,
+        aiProgress: state.aiProgress
+      },
+      tiempo: new Date().toISOString()
+    });
     
     // Si este es un bloque específico, podemos eliminarlo de la colección de bloques
     // después de completar para liberar memoria
