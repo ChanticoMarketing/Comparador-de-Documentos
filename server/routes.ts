@@ -24,8 +24,13 @@ interface ProcessingState {
   }>;
   isProcessing: boolean;
   error?: string;
+  blockId?: string; // Identificador único del bloque de comparación
 }
 
+// Ahora mantenemos un registro de múltiples bloques de procesamiento
+const processingBlocks: Record<string, ProcessingState> = {};
+
+// Estado principal para compatibilidad con código existente
 const processingState: ProcessingState = {
   ocrProgress: 0,
   aiProgress: 0,
@@ -145,13 +150,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ]),
     async (req: Request, res: Response) => {
       try {
-        // Check if processing is already in progress
-        if (processingState.isProcessing) {
-          return res.status(409).json({
-            message: "Another processing job is already in progress",
-          });
-        }
-
         const files = req.files as {
           [fieldname: string]: Express.Multer.File[];
         };
@@ -164,16 +162,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Reset processing state
-        processingState.ocrProgress = 0;
-        processingState.aiProgress = 0;
-        processingState.files = [];
-        processingState.isProcessing = true;
-        processingState.error = undefined;
+        // Obtener el ID del bloque de comparación (si existe)
+        const blockId = req.body.blockId || `block-${Date.now()}`;
+        console.log(`Procesando bloque de comparación: ${blockId}`);
 
-        // Add files to processing state
+        // Verificar si este bloque específico ya está en procesamiento
+        if (processingBlocks[blockId] && processingBlocks[blockId].isProcessing) {
+          return res.status(409).json({
+            message: `El bloque '${blockId}' ya está siendo procesado`,
+          });
+        }
+
+        // Crear un nuevo estado de procesamiento para este bloque
+        const blockState: ProcessingState = {
+          ocrProgress: 0,
+          aiProgress: 0,
+          files: [],
+          isProcessing: true,
+          error: undefined,
+          blockId: blockId,
+        };
+
+        // Agregar archivos al estado de procesamiento del bloque
         files.invoices.forEach((file) => {
-          processingState.files.push({
+          blockState.files.push({
             name: file.originalname,
             type: "invoice",
             size: file.size,
@@ -182,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         files.deliveryOrders.forEach((file) => {
-          processingState.files.push({
+          blockState.files.push({
             name: file.originalname,
             type: "deliveryOrder",
             size: file.size,
@@ -190,19 +202,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         });
 
+        // Registrar el bloque en la colección de bloques
+        processingBlocks[blockId] = blockState;
+
+        // Actualizar el estado principal para compatibilidad con código existente
+        Object.assign(processingState, blockState);
+
         // Create a new session
         const session = await storage.createSession(
           files.invoices[0].originalname,
           files.deliveryOrders[0].originalname
         );
+        blockState.sessionId = session.id;
         processingState.sessionId = session.id;
 
         // Start processing in the background
-        processFiles(files.invoices, files.deliveryOrders, session.id).catch(
+        processFiles(files.invoices, files.deliveryOrders, session.id, blockId).catch(
           (error) => {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error("Error processing files:", errorMsg);
-            processingState.isProcessing = false;
+            console.error(`Error processing files for block ${blockId}:`, errorMsg);
+            
+            if (processingBlocks[blockId]) {
+              processingBlocks[blockId].isProcessing = false;
+              processingBlocks[blockId].error = `Error processing files: ${errorMsg}`;
+            }
+            
+            // Actualizar el estado principal si corresponde al bloque actual
+            if (processingState.blockId === blockId) {
+              processingState.isProcessing = false;
+              processingState.error = `Error processing files: ${errorMsg}`;
+            }
             processingState.error = `Error processing files: ${errorMsg}`;
             // Update session status to error
             storage.updateSessionStatus(
@@ -233,6 +262,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get processing status
   app.get("/api/processing/status", (req: Request, res: Response) => {
+    // Verificar si hay un blockId en la consulta
+    const blockId = req.query.blockId as string;
+    
+    if (blockId) {
+      // Si se especifica un blockId, devolver el estado de ese bloque específico
+      const blockState = processingBlocks[blockId];
+      
+      if (!blockState || !blockState.isProcessing) {
+        return res.json({
+          ocrProgress: 0,
+          aiProgress: 0,
+          isProcessing: false,
+          files: [],
+        });
+      }
+      
+      // Devolver el estado del bloque específico
+      return res.json({
+        ocrProgress: blockState.ocrProgress,
+        aiProgress: blockState.aiProgress,
+        currentOcrFile: blockState.currentOcrFile,
+        files: blockState.files,
+        isProcessing: blockState.isProcessing,
+        error: blockState.error,
+        blockId: blockId,
+      });
+    }
+    
+    // Si no se especifica un blockId, devolvemos el estado principal o global
+    
+    // Verificar si hay bloques activos (para el panel principal)
+    const activeBlocks = Object.values(processingBlocks).filter(block => block.isProcessing);
+    
+    if (activeBlocks.length > 0) {
+      // Si hay bloques activos, devolver información resumida
+      return res.json({
+        ocrProgress: processingState.ocrProgress,
+        aiProgress: processingState.aiProgress,
+        currentOcrFile: processingState.currentOcrFile,
+        files: processingState.files,
+        isProcessing: processingState.isProcessing || activeBlocks.length > 0,
+        error: processingState.error,
+        activeBlocksCount: activeBlocks.length,
+        blockIds: Object.keys(processingBlocks).filter(id => processingBlocks[id].isProcessing),
+      });
+    }
+    
     // Limpiamos el estado cuando no hay procesamiento activo
     if (!processingState.isProcessing) {
       // Si no hay procesamiento activo, enviamos un estado limpio
@@ -245,7 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(cleanStatus);
     }
     
-    // Return the current processing state cuando hay procesamiento activo
+    // Return the current processing state cuando hay procesamiento activo principal
     const status: ProcessingStatus = {
       ocrProgress: processingState.ocrProgress,
       aiProgress: processingState.aiProgress,
@@ -257,33 +333,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.json(status);
   });
 
-  // Cancel processing
+  // Cancel processing - supports specific block cancellation or all blocks
   app.post("/api/processing/cancel", async (req: Request, res: Response) => {
-    if (!processingState.isProcessing) {
-      return res.status(400).json({
-        message: "No processing job is currently running",
+    // Verificar si se especifica un blockId para cancelar un bloque específico
+    const blockId = req.query.blockId as string;
+    
+    if (blockId) {
+      // Cancelar un bloque específico
+      if (!processingBlocks[blockId] || !processingBlocks[blockId].isProcessing) {
+        return res.status(400).json({
+          message: `No hay procesamiento activo para el bloque ${blockId}`,
+        });
+      }
+      
+      // Actualizar el estado de la sesión si existe
+      if (processingBlocks[blockId].sessionId) {
+        await storage.updateSessionStatus(
+          processingBlocks[blockId].sessionId,
+          "error",
+          "Procesamiento cancelado por el usuario"
+        );
+      }
+      
+      // Resetear el estado del bloque
+      processingBlocks[blockId].isProcessing = false;
+      processingBlocks[blockId].ocrProgress = 0;
+      processingBlocks[blockId].aiProgress = 0;
+      
+      console.log(`Bloque de procesamiento ${blockId} cancelado correctamente`);
+      
+      // Si este bloque también es el estado principal actual, restablecer ese también
+      if (processingState.blockId === blockId) {
+        processingState.isProcessing = false;
+        processingState.ocrProgress = 0;
+        processingState.aiProgress = 0;
+        processingState.sessionId = undefined;
+      }
+      
+      // Eliminar el bloque del registro
+      delete processingBlocks[blockId];
+      
+      return res.json({
+        message: `Procesamiento del bloque ${blockId} cancelado correctamente`,
+        success: true,
+      });
+    } else {
+      // Cancelación global de todos los procesamientos
+      if (!processingState.isProcessing && Object.values(processingBlocks).filter(b => b.isProcessing).length === 0) {
+        return res.status(400).json({
+          message: "No hay ningún procesamiento activo en este momento",
+        });
+      }
+      
+      // Cancelar todos los bloques activos
+      Object.keys(processingBlocks).forEach(id => {
+        if (processingBlocks[id].isProcessing) {
+          // Actualizar sesión si existe
+          if (processingBlocks[id].sessionId) {
+            storage.updateSessionStatus(
+              processingBlocks[id].sessionId,
+              "error",
+              "Procesamiento cancelado por el usuario"
+            ).catch(error => {
+              console.error(`Error al actualizar estado de sesión para bloque ${id}:`, error);
+            });
+          }
+          
+          // Eliminar el bloque
+          delete processingBlocks[id];
+        }
+      });
+      
+      // Actualizar el estado principal si está activo
+      if (processingState.isProcessing) {
+        // Actualizar el estado de la sesión si existe
+        if (processingState.sessionId) {
+          await storage.updateSessionStatus(
+            processingState.sessionId,
+            "error",
+            "Processing canceled by user"
+          );
+        }
+        
+        // Resetear estado principal
+        processingState.isProcessing = false;
+        processingState.ocrProgress = 0;
+        processingState.aiProgress = 0;
+        processingState.sessionId = undefined;
+      }
+      
+      console.log("Todos los procesamientos cancelados correctamente");
+      
+      return res.json({
+        message: "Procesamiento cancelado correctamente",
+        success: true,
       });
     }
-
-    // Update session status if we have one
-    if (processingState.sessionId) {
-      await storage.updateSessionStatus(
-        processingState.sessionId,
-        "error",
-        "Processing canceled by user"
-      );
-    }
-
-    // Reset processing state
-    processingState.isProcessing = false;
-    processingState.ocrProgress = 0;
-    processingState.aiProgress = 0;
-    processingState.sessionId = undefined;
-    
-    return res.json({
-      message: "Processing canceled successfully",
-      success: true,
-    });
   });
 
   // Get all sessions
@@ -482,14 +627,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 // Process files in the background
+// Declaración de la función modificada para aceptar blockId opcional
 async function processFiles(
   invoiceFiles: Express.Multer.File[],
   deliveryOrderFiles: Express.Multer.File[],
-  sessionId: number
+  sessionId: number,
+  blockId?: string
 ): Promise<void> {
   const ocrService = getOcrService();
   const matcherService = getMatcherService();
   const processedFiles: string[] = [];
+  
+  // Determinar qué estado de procesamiento usar: el del bloque específico o el global
+  const state = blockId && processingBlocks[blockId] 
+    ? processingBlocks[blockId] 
+    : processingState;
 
   try {
     // First, process all files with OCR
@@ -500,16 +652,16 @@ async function processFiles(
     let invoiceText = "";
     for (const file of invoiceFiles) {
       // Update processing state
-      const fileIndex = processingState.files.findIndex(
+      const fileIndex = state.files.findIndex(
         (f) => f.name === file.originalname && f.type === "invoice"
       );
       if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "processing";
+        state.files[fileIndex].status = "processing";
       }
-      processingState.currentOcrFile = file.originalname;
+      state.currentOcrFile = file.originalname;
 
       // Process the file
-      console.log(`Procesando archivo de factura: ${file.originalname} (${file.path})`);
+      console.log(`Procesando archivo de factura: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
@@ -526,11 +678,11 @@ async function processFiles(
 
       // Update processing state
       processedFileCount++;
-      processingState.ocrProgress = Math.floor(
+      state.ocrProgress = Math.floor(
         (processedFileCount / totalFiles) * 100
       );
       if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "completed";
+        state.files[fileIndex].status = "completed";
       }
       processedFiles.push(file.path);
     }
@@ -539,16 +691,16 @@ async function processFiles(
     let deliveryOrderText = "";
     for (const file of deliveryOrderFiles) {
       // Update processing state
-      const fileIndex = processingState.files.findIndex(
+      const fileIndex = state.files.findIndex(
         (f) => f.name === file.originalname && f.type === "deliveryOrder"
       );
       if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "processing";
+        state.files[fileIndex].status = "processing";
       }
-      processingState.currentOcrFile = file.originalname;
+      state.currentOcrFile = file.originalname;
 
       // Process the file
-      console.log(`Procesando archivo de orden de entrega: ${file.originalname} (${file.path})`);
+      console.log(`Procesando archivo de orden de entrega: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
       const { text, error } = await ocrService.extractText(
         file.path
       );
@@ -565,17 +717,17 @@ async function processFiles(
 
       // Update processing state
       processedFileCount++;
-      processingState.ocrProgress = Math.floor(
+      state.ocrProgress = Math.floor(
         (processedFileCount / totalFiles) * 100
       );
       if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "completed";
+        state.files[fileIndex].status = "completed";
       }
       processedFiles.push(file.path);
     }
 
     // Start AI analysis
-    processingState.aiProgress = 5;
+    state.aiProgress = 5;
     
     // Iniciar una simulación de progreso gradual mientras se procesa el análisis real
     // Esto proporciona feedback visual al usuario mientras el proceso real ocurre
@@ -584,8 +736,8 @@ async function processFiles(
       // Incrementar gradualmente hasta 70% mientras el análisis real ocurre
       if (currentProgress < 70) {
         currentProgress += 5;
-        processingState.aiProgress = currentProgress;
-        console.log(`Actualizando progreso de IA simulado: ${currentProgress}%`);
+        state.aiProgress = currentProgress;
+        console.log(`Actualizando progreso de IA simulado: ${currentProgress}% para bloque ${blockId || "principal"}`);
       }
     }, 1000);
     
@@ -603,7 +755,7 @@ async function processFiles(
       clearInterval(progressInterval);
       
       // Update AI progress to near complete
-      processingState.aiProgress = 90;
+      state.aiProgress = 90;
     } catch (error) {
       // Detener la simulación de progreso en caso de error
       clearInterval(progressInterval);
@@ -618,7 +770,7 @@ async function processFiles(
     }
 
     // Update AI progress to complete
-    processingState.aiProgress = 100;
+    state.aiProgress = 100;
 
     // Update session status
     await storage.updateSessionStatus(sessionId, "completed");
@@ -627,13 +779,20 @@ async function processFiles(
     await ocrService.cleanupFiles(processedFiles);
 
     // Reset processing state
-    processingState.isProcessing = false;
+    state.isProcessing = false;
+    
+    // Si este es un bloque específico, podemos eliminarlo de la colección de bloques
+    // después de completar para liberar memoria
+    if (blockId && processingBlocks[blockId]) {
+      console.log(`Bloque de comparación ${blockId} completado. Eliminando de la memoria.`);
+      delete processingBlocks[blockId];
+    }
   } catch (error) {
-    console.error("Error processing files:", error);
+    console.error(`Error processing files for block ${blockId || "principal"}:`, error);
     
     // Update processing state to indicate error
-    processingState.isProcessing = false;
-    processingState.error = error instanceof Error ? error.message : String(error);
+    state.isProcessing = false;
+    state.error = error instanceof Error ? error.message : String(error);
     
     // Update session status
     await storage.updateSessionStatus(
@@ -647,6 +806,12 @@ async function processFiles(
       ocrService.cleanupFiles(processedFiles).catch((cleanupError) => {
         console.error("Error cleaning up files:", cleanupError);
       });
+    }
+    
+    // Si este es un bloque específico con error, podemos eliminarlo de la colección
+    if (blockId && processingBlocks[blockId]) {
+      console.log(`Bloque de comparación ${blockId} falló. Eliminando de la memoria.`);
+      delete processingBlocks[blockId];
     }
     
     throw error;
