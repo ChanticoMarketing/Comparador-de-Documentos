@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useRoute } from "wouter";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { ComparisonResult } from "@/types";
 import { ResultsSection } from "@/components/dashboard/results-section";
 import { Button } from "@/components/ui/button";
@@ -13,12 +13,23 @@ export default function ComparisonDetail() {
   const [, params] = useRoute<{ id: string }>("/comparison/:id");
   const comparisonId = params?.id;
 
-  // Consultar los detalles de la comparación
-  const { data: comparison, isLoading, error } = useQuery<ComparisonResult>({
+  // Configuración para la consulta
+  const queryOptions: UseQueryOptions<ComparisonResult, Error, ComparisonResult> = {
     queryKey: [`/api/comparisons/${comparisonId}`],
-    retry: 1, // Intentar una vez más si falla
+    retry: 2, // Aumentamos a dos intentos si falla
     refetchOnWindowFocus: false, // No es necesario refrescar cuando la ventana recupera el foco
-  });
+    enabled: !!comparisonId // Solo ejecutar la consulta si tenemos un ID válido
+  };
+
+  // Consultar los detalles de la comparación con manejo mejorado de errores
+  const { data: comparison, isLoading, error } = useQuery<ComparisonResult, Error, ComparisonResult>(queryOptions);
+  
+  // Registrar errores para diagnóstico
+  useEffect(() => {
+    if (error) {
+      console.error(`Error al cargar la comparación ${comparisonId}:`, error);
+    }
+  }, [error, comparisonId]);
 
   // Manejar estado de carga
   if (isLoading) {

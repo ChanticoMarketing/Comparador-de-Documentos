@@ -2,6 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Accordion, 
+  AccordionContent, 
+  AccordionItem, 
+  AccordionTrigger 
+} from "@/components/ui/accordion";
 import { useQuery, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,8 +28,8 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       : ["/api/comparisons/latest"],
     enabled: true, // Siempre activado para detectar automáticamente nuevos resultados
     refetchOnWindowFocus: true, // Actualizar cuando la ventana recupere el foco
-    staleTime: 5000, // Consideramos datos "frescos" por 5 segundos (reducido de Infinity por defecto)
-    refetchInterval: 10000, // Refrescar cada 10s para asegurar datos actualizados
+    staleTime: 2000, // Consideramos datos "frescos" por solo 2 segundos para actualizaciones más frecuentes
+    refetchInterval: !comparisonId ? 5000 : false, // Refrescar cada 5s solo en la página principal para mayor reactividad
   };
   
   // Consulta con opciones tipadas correctamente
@@ -221,6 +227,16 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   // Asegurarnos de que tenemos ítems y metadata aunque vengan en formato diferente
   const items = data.items || [];
   
+  // Agrupar los ítems por producto para una mejor visualización
+  const groupedItems = items.reduce((grouped, item) => {
+    const product = item.productName;
+    if (!grouped[product]) {
+      grouped[product] = [];
+    }
+    grouped[product].push(item);
+    return grouped;
+  }, {} as Record<string, ResultItem[]>);
+  
   // Preparar el resumen
   let summary = data.summary;
   
@@ -292,12 +308,44 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   return (
     <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
-        <CardTitle className="text-lg font-medium text-white">
-          Resultados de la comparación
-        </CardTitle>
-        <CardDescription className="text-gray-400">
-          {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
-        </CardDescription>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle className="text-lg font-medium text-white">
+              Resultados de la comparación
+            </CardTitle>
+            <CardDescription className="text-gray-400">
+              {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
+            </CardDescription>
+          </div>
+          {!comparisonId && (
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                className="bg-blue-700 hover:bg-blue-800 border-blue-900 text-white text-xs"
+                onClick={() => window.open(`/api/comparisons/${data.id}/export?format=pdf`, '_blank')}
+                disabled={!data.id}
+                size="sm"
+              >
+                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-green-700 hover:bg-green-800 border-green-900 text-white text-xs"
+                onClick={() => window.open(`/api/comparisons/${data.id}/export?format=excel`, '_blank')}
+                disabled={!data.id}
+                size="sm"
+              >
+                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Excel
+              </Button>
+            </div>
+          )}
+        </div>
       </CardHeader>
       
       <CardContent className="p-6">
@@ -387,54 +435,86 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
           </div>
           
           <TabsContent value="products" className="pt-6">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Producto
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Factura
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Orden Entrega
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Nota
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {items.map((item: any, index: number) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                        {item.productName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <span className={getHighlightClass(item.status)}>
-                          {item.invoiceValue}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <span className={getHighlightClass(item.status)}>
-                          {item.deliveryOrderValue}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {renderStatusBadge(item.status)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-300">
-                        {item.note || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Accordion type="single" collapsible className="w-full space-y-3">
+              {Object.entries(groupedItems).map(([productName, productItems], groupIndex) => {
+                // Determinar el estado global del grupo
+                const groupStatus = productItems.some(item => item.status === "error") 
+                  ? "error" 
+                  : productItems.some(item => item.status === "warning") 
+                    ? "warning" 
+                    : "match";
+                
+                return (
+                  <AccordionItem 
+                    key={groupIndex} 
+                    value={`item-${groupIndex}`}
+                    className={`border border-gray-700 rounded-md overflow-hidden ${
+                      groupStatus === "error" 
+                        ? "bg-red-900/10 border-red-900/30" 
+                        : groupStatus === "warning" 
+                          ? "bg-yellow-900/10 border-yellow-900/30" 
+                          : "bg-green-900/10 border-green-900/30"
+                    }`}
+                  >
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium text-white">{productName}</span>
+                        <div className="flex items-center space-x-3">
+                          {renderStatusBadge(groupStatus)}
+                          <span className="text-sm text-gray-400">
+                            ({productItems.length} variante{productItems.length !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="px-4 pb-4 overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-700">
+                          <thead className="bg-gray-800/60">
+                            <tr>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Factura
+                              </th>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Orden Entrega
+                              </th>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Estado
+                              </th>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Nota
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700/50">
+                            {productItems.map((item: any, index: number) => (
+                              <tr key={index} className={`${getHighlightClass(item.status)}`}>
+                                <td className="px-4 py-3 text-sm text-gray-300">
+                                  <span className="font-medium">
+                                    {item.invoiceValue}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-300">
+                                  <span className="font-medium">
+                                    {item.deliveryOrderValue}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {renderStatusBadge(item.status)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-300">
+                                  {item.note || "-"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           </TabsContent>
           
           <TabsContent value="metadata" className="pt-6">

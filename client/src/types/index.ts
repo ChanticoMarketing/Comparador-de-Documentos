@@ -79,6 +79,8 @@ export interface Session {
   matchCount: number;
   warningCount: number;
   errorCount: number;
+  userId?: number;
+  username?: string; // Nombre de usuario que realizó la comparación
 }
 
 // Available tabs in the results view

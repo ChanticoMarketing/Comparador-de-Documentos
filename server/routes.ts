@@ -568,12 +568,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get a specific comparison result
   app.get("/api/comparisons/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      // Convertir ID a número y verificar que sea válido
       const comparisonId = parseInt(req.params.id);
       if (isNaN(comparisonId)) {
+        console.error(`ID de comparación inválido recibido: "${req.params.id}"`);
         return res.status(400).json({
           message: "ID de comparación inválido",
         });
       }
+
+      console.log(`Solicitando comparación ID: ${comparisonId}`);
 
       // Manejamos el tipo de usuario de manera segura
       const authReq = req as unknown as AuthRequest;
@@ -581,35 +585,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Obtener el ID del usuario actual
       const userId = getUserId(authReq);
       if (!userId) {
+        console.error("Solicitud sin usuario autenticado");
         return res.status(401).json({
           message: "Sesión no válida. Por favor inicie sesión nuevamente.",
         });
       }
 
+      console.log(`Usuario ${userId} solicitando comparación ${comparisonId}`);
+
       // Obtener la comparación
       const comparison = await storage.getComparison(comparisonId);
       
-      // Si no existe o no pertenece al usuario actual (excepto para admins)
+      // Si no existe, retornar 404 con mensaje claro
       if (!comparison) {
+        console.error(`Comparación ID ${comparisonId} no encontrada en la base de datos`);
         return res.status(404).json({
-          message: "Comparación no encontrada",
+          message: `Comparación con ID ${comparisonId} no encontrada. Por favor verifique que el ID es correcto.`,
         });
       }
 
-      // Verificar que la comparación pertenece al usuario o es administrador
+      // Verificar que la comparación pertenece al usuario (si tiene userId definido)
       // Si el campo userId no está definido en la comparación (migraciones antiguas) permitir acceso
       const comparisonUserId = comparison.userId as number | undefined;
+      
+      // Solo verificar permisos si el usuario está definido en la comparación
       if (comparisonUserId !== undefined && comparisonUserId !== userId) {
+        console.error(`Usuario ${userId} intentó acceder a comparación ${comparisonId} que pertenece a usuario ${comparisonUserId}`);
         return res.status(403).json({
           message: "No tienes permiso para acceder a esta comparación",
         });
       }
 
+      // Comparación encontrada y permisos verificados, devolver datos
+      console.log(`Comparación ${comparisonId} enviada exitosamente al usuario ${userId}`);
       return res.json(comparison);
     } catch (error) {
-      console.error("Error fetching comparison:", error);
+      console.error(`Error procesando solicitud de comparación:`, error);
       return res.status(500).json({
-        message: `Error fetching comparison: ${
+        message: `Error al obtener la comparación: ${
           error instanceof Error ? error.message : String(error)
         }`,
       });
