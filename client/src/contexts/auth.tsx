@@ -41,7 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       try {
-        const response = await fetch('/api/auth/me');
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include', // Incluir cookies en todas las peticiones
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
         if (!response.ok) {
           if (response.status === 401) {
             return null; // No autenticado, pero no es un error
@@ -56,6 +62,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     retry: false,
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000, // 5 minutos antes de considerar datos obsoletos
+    gcTime: 10 * 60 * 1000, // 10 minutos en caché
   });
 
   // Actualizar el usuario cuando cambia la consulta
@@ -69,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Incluir cookies para persistir la sesión
         body: JSON.stringify({ username, password }),
       });
 
@@ -102,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Incluir cookies para persistir la sesión
         body: JSON.stringify(userData),
       });
 
@@ -134,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     mutationFn: async () => {
       const response = await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include', // Incluir cookies para el logout
       });
 
       if (!response.ok) {
