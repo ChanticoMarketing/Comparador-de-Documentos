@@ -34,22 +34,28 @@ const AuthContext = createContext<AuthContextProps | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const { toast } = useToast();
 
   // Consulta para verificar si el usuario está autenticado
   const { isLoading: authCheckLoading, data: userData, refetch } = useQuery({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      const response = await fetch('/api/auth/me', {
-        credentials: 'include',
-      });
-      if (response.status === 401) {
-        return null;
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+        });
+        if (response.status === 401) {
+          return null;
+        }
+        if (!response.ok) {
+          throw new Error('Error al verificar autenticación');
+        }
+        return response.json();
+      } finally {
+        // Marcar que la verificación inicial ha terminado
+        setIsInitialLoading(false);
       }
-      if (!response.ok) {
-        throw new Error('Error al verificar autenticación');
-      }
-      return response.json();
     },
     retry: false,
     refetchOnWindowFocus: false,
@@ -186,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = {
     user,
-    isLoading: authCheckLoading || loginMutation.isPending || registerMutation.isPending || logoutMutation.isPending,
+    isLoading: isInitialLoading || authCheckLoading || loginMutation.isPending || registerMutation.isPending || logoutMutation.isPending,
     isAuthenticated: !!user,
     login,
     register,
