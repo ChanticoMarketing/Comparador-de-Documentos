@@ -152,7 +152,12 @@ export function FileUploadSection() {
             {index > 0 && <Separator className="my-6 bg-gray-700" />}
             
             <div className="flex justify-between items-center">
-              <h3 className="text-md font-medium text-white">Bloque de comparación {index + 1}</h3>
+              <h3 className="text-md font-medium text-white">
+                {block.invoiceFiles.length > 0 
+                  ? `${block.invoiceFiles[0].name.replace(/\.[^/.]+$/, "")}` // Mostrar nombre de factura sin extensión
+                  : `Bloque de comparación ${index + 1}`
+                }
+              </h3>
               {blocks.length > 1 && (
                 <Button 
                   variant="outline" 
