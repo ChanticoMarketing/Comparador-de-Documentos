@@ -12,9 +12,10 @@ const PgSession = connectPgSimple(session);
 
 // Configuración para connect-pg-simple
 const pgStoreConfig = {
-  pool: db.$pool, // Usa el pool de conexiones de Drizzle
+  conString: process.env.DATABASE_URL, // Usa la URL de conexión directa
   tableName: 'session', // Nombre de la tabla de sesiones (definida en schema.ts)
-  createTableIfMissing: true
+  createTableIfMissing: true,
+  ttl: 7 * 24 * 60 * 60 // 7 días en segundos
 };
 
 /**
@@ -23,18 +24,18 @@ const pgStoreConfig = {
  */
 const sessionConfig = {
   store: new PgSession(pgStoreConfig),
-  secret: process.env.SESSION_SECRET || 'ocr-matcher-secret-key',
+  secret: process.env.SESSION_SECRET || 'ocr-matcher-secret-key-default',
   // Evita guardar la sesión si no se modificó
   resave: false,
   // Permite mantener la sesión "viva" con cada petición
   rolling: true,
   // Solo guarda sesiones iniciadas (mejora rendimiento y seguridad)
   saveUninitialized: false,
-  name: 'ocr-matcher.sid', // Nombre personalizado para evitar fingerprinting
+  name: 'sessionId', // Nombre más simple y estándar
   cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días (más razonable)
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días para persistencia mayor
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Solo seguro en producción
+    secure: false, // Deshabilitar en desarrollo para que funcione en localhost
     sameSite: 'lax' as const,
     path: '/' // Asegura que la cookie está disponible en toda la aplicación
   }
@@ -45,6 +46,9 @@ const sessionConfig = {
  * @param app Instancia de Express
  */
 export function configureAuth(app: Express) {
+  // Configurar trust proxy para que las cookies funcionen correctamente
+  app.set('trust proxy', 1);
+  
   // Configurar la sesión
   app.use(session(sessionConfig));
   
@@ -71,9 +75,13 @@ export function configureAuth(app: Express) {
   passport.deserializeUser(async (id: number, done) => {
     try {
       const user = await authService.getUserById(id);
+      if (!user) {
+        return done(null, false); // Usuario no encontrado, sesión inválida
+      }
       done(null, user);
     } catch (error) {
-      done(error);
+      console.error('Error deserializando usuario:', error);
+      done(null, false); // En caso de error, invalidar la sesión
     }
   });
 }
