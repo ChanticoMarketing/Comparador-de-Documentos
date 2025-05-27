@@ -180,63 +180,54 @@ function ProcessingBlock({ blockId }: { blockId?: string }) {
         </div>
       )}
       
-      {/* OCR Progress with enhanced feedback */}
-      <div>
-        <div className="flex justify-between mb-2">
-          <span className="text-sm font-medium text-white">Extracción de datos</span>
-          <span className="text-sm font-medium text-white">{processingData.ocrProgress}%</span>
-        </div>
-        <Progress 
-          value={processingData.ocrProgress} 
-          variant="default" 
-          className={`bg-gray-700 ${processingData.ocrProgress > 0 && processingData.ocrProgress < 100 ? 'animate-pulse' : ''}`}
-        />
-        <div className="mt-2">
-          {processingData.ocrProgress > 0 && processingData.ocrProgress < 100 ? (
-            <div className="flex items-center text-xs">
-              <div className="mr-2 h-2 w-2 rounded-full bg-amber-400 animate-pulse"></div>
-              <span className="text-amber-300 font-medium">
-                {processingData.currentOcrFile 
-                  ? `Procesando: ${processingData.currentOcrFile}` 
-                  : "Extrayendo texto de los documentos..."}
-              </span>
+      {/* Processing Status Indicators */}
+      <div className="space-y-4">
+        {/* OCR Status */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-white">Extracción de datos OCR</span>
+            <div className="flex items-center">
+              {processingData.isProcessing ? (
+                <>
+                  <div className="mr-2 h-2 w-2 rounded-full bg-amber-400 animate-pulse"></div>
+                  <span className="text-amber-300 text-sm">Procesando</span>
+                </>
+              ) : (
+                <>
+                  <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
+                  <span className="text-green-300 text-sm">Completado</span>
+                </>
+              )}
             </div>
-          ) : processingData.ocrProgress === 0 ? (
-            <span className="text-xs text-gray-400">Preparando documentos...</span>
-          ) : (
-            <div className="flex items-center text-xs">
-              <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
-              <span className="text-green-300 font-medium">Extracción de texto completada</span>
+          </div>
+          {processingData.currentOcrFile && (
+            <div className="mt-2 text-xs text-gray-400">
+              Archivo actual: {processingData.currentOcrFile}
             </div>
           )}
         </div>
-      </div>
-      
-      {/* AI Analysis Progress with enhanced feedback */}
-      <div>
-        <div className="flex justify-between mb-2">
-          <span className="text-sm font-medium text-white">Análisis Comparativo</span>
-          <span className="text-sm font-medium text-white">{processingData.aiProgress}%</span>
-        </div>
-        <Progress 
-          value={processingData.aiProgress} 
-          variant="default" 
-          className={`bg-gray-700 ${processingData.aiProgress > 0 && processingData.aiProgress < 100 ? 'animate-pulse' : ''}`} 
-        />
-        <div className="mt-2">
-          {processingData.aiProgress > 0 && processingData.aiProgress < 100 ? (
-            <div className="flex items-center text-xs">
-              <div className="mr-2 h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
-              <span className="text-blue-300 font-medium">
-                {processingData.currentAiStage || "Comparando elementos y detectando discrepancias"}
-              </span>
+
+        {/* AI Analysis Status */}
+        <div className="bg-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-white">Análisis Comparativo IA</span>
+            <div className="flex items-center">
+              {processingData.isProcessing ? (
+                <>
+                  <div className="mr-2 h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
+                  <span className="text-blue-300 text-sm">Analizando</span>
+                </>
+              ) : (
+                <>
+                  <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
+                  <span className="text-green-300 text-sm">Completado</span>
+                </>
+              )}
             </div>
-          ) : processingData.aiProgress === 0 ? (
-            <span className="text-xs text-gray-400">Esperando a que finalice el OCR...</span>
-          ) : (
-            <div className="flex items-center text-xs">
-              <div className="mr-2 h-2 w-2 rounded-full bg-green-400"></div>
-              <span className="text-green-300 font-medium">Análisis completado</span>
+          </div>
+          {processingData.currentAiStage && (
+            <div className="mt-2 text-xs text-gray-400">
+              {processingData.currentAiStage}
             </div>
           )}
         </div>
