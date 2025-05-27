@@ -17,23 +17,42 @@ interface ResultsSectionProps {
   comparisonId?: string;
 }
 
+type ComparisonWithSession = ComparisonResult & {
+  sessionInfo?: {
+    id: number;
+    name: string;
+    createdAt: string;
+    status: string;
+  };
+};
+
 export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
+  const [showMultipleResults, setShowMultipleResults] = useState(false);
   const { toast } = useToast();
 
-  // Opciones de consulta mejoradas para React Query
-  const queryOptions: UseQueryOptions<ComparisonResult, Error, ComparisonResult> = {
-    queryKey: comparisonId 
-      ? [`/api/comparisons/${comparisonId}`]
-      : ["/api/comparisons/latest"],
-    enabled: true, // Siempre activado para detectar automáticamente nuevos resultados
-    refetchOnWindowFocus: true, // Actualizar cuando la ventana recupere el foco
-    staleTime: 2000, // Consideramos datos "frescos" por solo 2 segundos para actualizaciones más frecuentes
-    refetchInterval: !comparisonId ? 5000 : false, // Refrescar cada 5s solo en la página principal para mayor reactividad
-  };
-  
-  // Consulta con opciones tipadas correctamente
-  const { data, isLoading, error, isSuccess, isFetching } = useQuery<ComparisonResult, Error, ComparisonResult>(queryOptions);
+  // Query para una comparación específica
+  const singleComparisonQuery = useQuery<ComparisonResult, Error, ComparisonResult>({
+    queryKey: [`/api/comparisons/${comparisonId}`],
+    enabled: !!comparisonId,
+    refetchOnWindowFocus: true,
+    staleTime: 2000,
+  });
+
+  // Query para múltiples comparaciones recientes
+  const multipleComparisonsQuery = useQuery<ComparisonWithSession[], Error, ComparisonWithSession[]>({
+    queryKey: ["/api/comparisons/recent"],
+    enabled: !comparisonId,
+    refetchOnWindowFocus: true,
+    staleTime: 2000,
+    refetchInterval: 5000,
+  });
+
+  // Determinar qué datos usar
+  const data = comparisonId ? singleComparisonQuery.data : multipleComparisonsQuery.data?.[0];
+  const allComparisons = comparisonId ? (singleComparisonQuery.data ? [singleComparisonQuery.data] : []) : multipleComparisonsQuery.data || [];
+  const isLoading = comparisonId ? singleComparisonQuery.isLoading : multipleComparisonsQuery.isLoading;
+  const error = comparisonId ? singleComparisonQuery.error : multipleComparisonsQuery.error;
   
   // Efecto para detectar y registrar actualizaciones de datos
   useEffect(() => {
@@ -315,8 +334,21 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
             </CardTitle>
             <CardDescription className="text-gray-400">
               {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
+              {!comparisonId && allComparisons.length > 1 && (
+                <span className="ml-2 text-blue-400">({allComparisons.length} bloques procesados)</span>
+              )}
             </CardDescription>
           </div>
+          {!comparisonId && allComparisons.length > 1 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMultipleResults(!showMultipleResults)}
+              className="text-blue-400 border-blue-600 hover:bg-blue-900"
+            >
+              {showMultipleResults ? 'Mostrar solo último' : 'Ver todos los bloques'}
+            </Button>
+          )}
           {!comparisonId && (
             <div className="flex space-x-2">
               <Button
@@ -349,8 +381,53 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       </CardHeader>
       
       <CardContent className="p-6">
-        {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Mostrar múltiples resultados si está activado y hay varios bloques */}
+        {!comparisonId && showMultipleResults && allComparisons.length > 1 ? (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-white mb-4">
+              Resultados de todos los bloques procesados ({allComparisons.length})
+            </h3>
+            {allComparisons.map((comparison, index) => (
+              <div key={comparison.id} className="border border-gray-600 rounded-lg p-4 bg-gray-750">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium text-white">
+                    Bloque {index + 1}: {comparison.invoiceFilename || `Comparación ${comparison.id}`}
+                  </h4>
+                  <span className="text-sm text-gray-400">
+                    {new Date(comparison.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span className="text-gray-300">Coincidencias: {comparison.matchCount || 0}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    <span className="text-gray-300">Advertencias: {comparison.warningCount || 0}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                    <span className="text-gray-300">Discrepancias: {comparison.errorCount || 0}</span>
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.href = `/comparison/${comparison.id}`}
+                    className="text-blue-400 border-blue-600 hover:bg-blue-900"
+                  >
+                    Ver detalles
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 p-2 rounded-md bg-green-900">
@@ -629,7 +706,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               )}
             </Button>
           </div>
-        </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

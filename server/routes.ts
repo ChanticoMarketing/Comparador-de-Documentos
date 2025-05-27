@@ -565,6 +565,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all recent comparisons (for multiple blocks)
+  app.get("/api/comparisons/recent", async (req: Request, res: Response) => {
+    try {
+      // Obtener las últimas 10 comparaciones para mostrar resultados de múltiples bloques
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const recentSessions = await storage.getAllSessions(limit);
+      
+      // Para cada sesión, obtener su comparación más reciente
+      const comparisons = [];
+      for (const session of recentSessions) {
+        const comparison = await storage.getLatestComparison(session.id);
+        if (comparison) {
+          comparisons.push({
+            ...comparison,
+            sessionInfo: {
+              id: session.id,
+              name: session.invoiceFilename || `Sesión ${session.id}`,
+              createdAt: session.createdAt,
+              status: session.status
+            }
+          });
+        }
+      }
+
+      return res.json(comparisons);
+    } catch (error) {
+      console.error("Error fetching recent comparisons:", error);
+      return res.status(500).json({
+        message: `Error fetching recent comparisons: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  });
+
   // Get a specific comparison result
   app.get("/api/comparisons/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
