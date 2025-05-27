@@ -50,7 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       try {
-        const response = await fetch('/api/auth/me');
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+        });
         if (!response.ok) {
           if (response.status === 401) {
             return null; // No autenticado, pero no es un error
@@ -65,6 +67,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     retry: false, // No reintentar si falla
     refetchOnWindowFocus: false, // No volver a consultar cuando la ventana tiene foco
+    staleTime: 0, // Siempre verificar
+    gcTime: 0, // No cachear
   });
   
   // Actualizar el usuario cuando cambia la consulta
@@ -78,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
 
