@@ -347,18 +347,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Verificar si hay bloques activos (para el panel principal)
     const activeBlocks = Object.values(processingBlocks).filter(block => block.isProcessing);
+    const activeBlockIds = Object.keys(processingBlocks).filter(id => processingBlocks[id].isProcessing);
     
     if (activeBlocks.length > 0) {
-      // Si hay bloques activos, devolver información resumida
+      // Obtener el primer bloque activo para mostrar su estado
+      const firstActiveBlock = activeBlocks[0];
+      
       return res.json({
-        ocrProgress: processingState.ocrProgress,
-        aiProgress: processingState.aiProgress,
-        currentOcrFile: processingState.currentOcrFile,
-        files: processingState.files,
-        isProcessing: processingState.isProcessing || activeBlocks.length > 0,
-        error: processingState.error,
+        ocrProgress: firstActiveBlock.ocrProgress || 0,
+        aiProgress: firstActiveBlock.aiProgress || 0,
+        currentOcrFile: firstActiveBlock.currentOcrFile,
+        currentAiStage: firstActiveBlock.currentAiStage,
+        files: firstActiveBlock.files || [],
+        isProcessing: true,
+        error: firstActiveBlock.error,
         activeBlocksCount: activeBlocks.length,
-        blockIds: Object.keys(processingBlocks).filter(id => processingBlocks[id].isProcessing),
+        blockIds: activeBlockIds,
+        currentBlockId: activeBlockIds[0], // ID del bloque que se está procesando actualmente
       });
     }
     

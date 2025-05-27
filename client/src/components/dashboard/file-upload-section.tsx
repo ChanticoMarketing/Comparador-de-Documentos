@@ -115,8 +115,85 @@ export function FileUploadSection() {
     uploadMutation.mutate(blockId);
   };
 
+  // Mutación separada para procesar múltiples bloques
+  const uploadAllMutation = useMutation({
+    mutationFn: async () => {
+      const validBlocks = blocks.filter(block => 
+        block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0
+      );
+      
+      if (validBlocks.length === 0) {
+        throw new Error("No hay bloques válidos para procesar");
+      }
+
+      console.log(`Iniciando procesamiento de ${validBlocks.length} bloques válidos`);
+      
+      // Procesar todos los bloques secuencialmente
+      for (let i = 0; i < validBlocks.length; i++) {
+        const block = validBlocks[i];
+        console.log(`Procesando bloque ${i + 1}/${validBlocks.length}: ${block.id}`);
+        
+        // Crear FormData para este bloque específico
+        const formData = new FormData();
+        formData.append("blockId", block.id);
+        
+        // Agregar archivos de facturas
+        block.invoiceFiles.forEach(file => {
+          formData.append("invoices", file);
+        });
+        
+        // Agregar archivos de órdenes de entrega
+        block.deliveryFiles.forEach(file => {
+          formData.append("deliveryOrders", file);
+        });
+        
+        // Enviar este bloque al servidor
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Error en bloque ${block.id}: ${errorText}`);
+        }
+        
+        console.log(`Bloque ${block.id} enviado exitosamente`);
+        
+        // Pequeña pausa entre bloques para evitar sobrecarga
+        if (i < validBlocks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      return { processedBlocks: validBlocks.length };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Procesamiento iniciado",
+        description: `Se han enviado ${data.processedBlocks} bloques para procesamiento`,
+      });
+      
+      // Invalidar consultas para actualización automática
+      queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/comparisons/latest"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] });
+      
+      console.log(`Procesamiento de ${data.processedBlocks} bloques iniciado exitosamente`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al procesar bloques",
+        description: error.message,
+        variant: "destructive",
+      });
+      console.error("Error en procesamiento múltiple:", error);
+    },
+  });
+
   // Función para procesar todos los bloques válidos de una vez
-  const handleUploadAll = async () => {
+  const handleUploadAll = () => {
     const validBlocks = blocks.filter(block => 
       block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0
     );
@@ -130,15 +207,7 @@ export function FileUploadSection() {
       return;
     }
 
-    // Procesar todos los bloques válidos secuencialmente
-    for (const block of validBlocks) {
-      try {
-        await uploadMutation.mutateAsync(block.id);
-      } catch (error) {
-        console.error(`Error procesando bloque ${block.id}:`, error);
-        // Continuar con el siguiente bloque incluso si uno falla
-      }
-    }
+    uploadAllMutation.mutate();
   };
 
   // Función para añadir un nuevo bloque de comparación
@@ -259,11 +328,11 @@ export function FileUploadSection() {
         <div className="flex justify-center mt-8 pt-6 border-t border-gray-700">
           <Button 
             onClick={handleUploadAll}
-            disabled={uploadMutation.isPending || blocks.every(block => block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0)}
+            disabled={uploadAllMutation.isPending || blocks.every(block => block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0)}
             className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-3 text-lg font-medium"
             size="lg"
           >
-            {uploadMutation.isPending ? (
+            {uploadAllMutation.isPending ? (
               <>
                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
