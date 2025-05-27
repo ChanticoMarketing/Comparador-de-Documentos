@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient } from '../lib/queryClient';
+import { queryClient, getQueryFn } from '../lib/queryClient';
 
 // Tipos y definiciones
 export type User = {
@@ -38,37 +38,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Consulta para verificar si el usuario está autenticado
   const { isLoading: authCheckLoading, data: userData, refetch } = useQuery({
-    queryKey: ['auth', 'me'],
+    queryKey: ['/api/auth/me'],
     queryFn: async () => {
-      try {
-        const response = await fetch('/api/auth/me', {
-          method: 'GET',
-          credentials: 'include', // Incluir cookies en todas las peticiones
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!response.ok) {
-          if (response.status === 401) {
-            return null; // No autenticado, pero no es un error
-          }
-          throw new Error('Error al verificar la autenticación');
-        }
-        return response.json();
-      } catch (error) {
-        console.error('Error al verificar autenticación:', error);
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include',
+      });
+      if (response.status === 401) {
         return null;
       }
+      if (!response.ok) {
+        throw new Error('Error al verificar autenticación');
+      }
+      return response.json();
     },
     retry: false,
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutos antes de considerar datos obsoletos
-    gcTime: 10 * 60 * 1000, // 10 minutos en caché
+    staleTime: 0, // Siempre verificar el estado actual
+    gcTime: 0, // No usar caché para autenticación
   });
 
   // Actualizar el usuario cuando cambia la consulta
   useEffect(() => {
-    setUser(userData || null);
+    if (userData && typeof userData === 'object' && 'id' in userData) {
+      setUser(userData as User);
+    } else {
+      setUser(null);
+    }
   }, [userData]);
 
   // Mutación para inicio de sesión

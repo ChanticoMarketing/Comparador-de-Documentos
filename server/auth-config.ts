@@ -25,19 +25,20 @@ const pgStoreConfig = {
 const sessionConfig = {
   store: new PgSession(pgStoreConfig),
   secret: process.env.SESSION_SECRET || 'ocr-matcher-secret-key-default',
-  // Evita guardar la sesión si no se modificó
-  resave: false,
+  // Forzar guardar la sesión para asegurar persistencia
+  resave: true,
   // Permite mantener la sesión "viva" con cada petición
-  rolling: true,
+  rolling: false,
   // Solo guarda sesiones iniciadas (mejora rendimiento y seguridad)
   saveUninitialized: false,
-  name: 'sessionId', // Nombre más simple y estándar
+  name: 'connect.sid', // Nombre estándar de express-session
   cookie: {
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días para persistencia mayor
-    httpOnly: true,
+    httpOnly: false, // Cambiar a false para permitir acceso desde JavaScript si es necesario
     secure: false, // Deshabilitar en desarrollo para que funcione en localhost
     sameSite: 'lax' as const,
-    path: '/' // Asegura que la cookie está disponible en toda la aplicación
+    path: '/', // Asegura que la cookie está disponible en toda la aplicación
+    domain: undefined // No especificar dominio para que funcione en cualquier host
   }
 };
 
