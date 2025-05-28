@@ -128,42 +128,64 @@ export function FileUploadSection() {
 
       console.log(`Iniciando procesamiento de ${validBlocks.length} bloques válidos`);
       
-      // Procesar todos los bloques secuencialmente
+      // Procesar todos los bloques secuencialmente con espera completa
+      const processedResults = [];
+      
       for (let i = 0; i < validBlocks.length; i++) {
         const block = validBlocks[i];
-        console.log(`Procesando bloque ${i + 1}/${validBlocks.length}: ${block.id}`);
+        console.log(`Iniciando procesamiento del bloque ${i + 1}/${validBlocks.length}: ${block.id}`);
         
-        // Crear FormData para este bloque específico
-        const formData = new FormData();
-        formData.append("blockId", block.id);
-        
-        // Agregar archivos de facturas
-        block.invoiceFiles.forEach(file => {
-          formData.append("invoices", file);
-        });
-        
-        // Agregar archivos de órdenes de entrega
-        block.deliveryFiles.forEach(file => {
-          formData.append("deliveryOrders", file);
-        });
-        
-        // Enviar este bloque al servidor
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Error en bloque ${block.id}: ${errorText}`);
-        }
-        
-        console.log(`Bloque ${block.id} enviado exitosamente`);
-        
-        // Pequeña pausa entre bloques para evitar sobrecarga
-        if (i < validBlocks.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          // Crear FormData para este bloque específico
+          const formData = new FormData();
+          formData.append("blockId", block.id);
+          
+          // Agregar archivos de facturas
+          block.invoiceFiles.forEach(file => {
+            formData.append("invoices", file);
+          });
+          
+          // Agregar archivos de órdenes de entrega
+          block.deliveryFiles.forEach(file => {
+            formData.append("deliveryOrders", file);
+          });
+          
+          // Enviar este bloque al servidor y esperar respuesta completa
+          const response = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Error en bloque ${block.id}: ${errorText}`);
+            throw new Error(`Error en bloque ${block.id}: ${errorText}`);
+          }
+          
+          const result = await response.json();
+          processedResults.push({
+            blockId: block.id,
+            sessionId: result.sessionId,
+            success: true
+          });
+          
+          console.log(`Bloque ${block.id} enviado exitosamente. SessionId: ${result.sessionId}`);
+          
+          // Espera entre bloques para evitar saturación del servidor
+          if (i < validBlocks.length - 1) {
+            console.log(`Esperando antes de procesar el siguiente bloque...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          
+        } catch (error) {
+          console.error(`Falló el procesamiento del bloque ${block.id}:`, error);
+          processedResults.push({
+            blockId: block.id,
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          // Continuar con el siguiente bloque incluso si uno falla
         }
       }
       
