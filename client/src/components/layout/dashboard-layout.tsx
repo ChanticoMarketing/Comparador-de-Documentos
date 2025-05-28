@@ -21,29 +21,8 @@ export function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-900 text-gray-200">
-      {/* Sidebar for desktop */}
-      <Sidebar className="hidden md:flex md:flex-col md:w-64" />
-      
-      {/* Mobile menu button */}
-      <div className="md:hidden absolute top-4 left-4 z-10">
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="text-gray-300 hover:text-white"
-          onClick={() => setIsMobileMenuOpen(true)}
-        >
-          <Menu className="h-6 w-6" />
-        </Button>
-      </div>
-      
-      {/* Mobile menu */}
-      <MobileMenu 
-        isOpen={isMobileMenuOpen} 
-        onClose={() => setIsMobileMenuOpen(false)} 
-      />
-      
-      {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      {/* Main content - ahora ocupa todo el ancho */}
+      <main className="flex-1 flex flex-col overflow-hidden w-full">
         <div className="py-6 px-4 sm:px-6 lg:px-8 flex flex-col flex-1 min-h-0">
           {/* Header - fijo, no debe scrollear */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-gray-700">
