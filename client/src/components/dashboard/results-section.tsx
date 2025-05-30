@@ -169,27 +169,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     );
   }
   
+  // No mostrar la sección si hay error o no hay datos disponibles
   if (error || !data) {
-    return (
-      <Card className="mt-6 bg-gray-800 border-gray-700">
-        <CardHeader className="border-b border-gray-700">
-          <CardTitle className="text-lg font-medium text-white">
-            Error al cargar resultados
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            No se pudieron obtener los detalles de la comparación
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="bg-red-900 bg-opacity-20 border border-red-800 rounded-lg p-6">
-            <h3 className="text-lg font-medium text-red-300 mb-2">Error</h3>
-            <p className="text-red-200">
-              {error instanceof Error ? error.message : "Error desconocido al cargar los resultados de comparación."}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   // Function to get status class for highlighting differences
