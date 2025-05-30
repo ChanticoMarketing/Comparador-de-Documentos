@@ -156,32 +156,26 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
+      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
+      matchCount: comparison.matchCount,
+      warningCount: comparison.warningCount,
+      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: {
-        productName: string;
-        invoiceValue: string;
-        deliveryOrderValue: string;
-        status: string;
-        note?: string;
-      }) => ({
+      items: comparison.items.map((item: any) => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: {
-        field: string;
-        invoiceValue: string;
-        deliveryOrderValue: string;
-      }) => ({
+      metadata: comparison.metadata.map((meta: any) => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -209,22 +203,26 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
+      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
+      matchCount: comparison.matchCount,
+      warningCount: comparison.warningCount,
+      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map(item => ({
+      items: comparison.items.map((item: any) => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map(meta => ({
+      metadata: comparison.metadata.map((meta: any) => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -251,6 +249,51 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
+      sessionId: comparison.sessionId,
+      invoiceFilename: comparison.invoiceFilename,
+      deliveryOrderFilename: comparison.deliveryOrderFilename,
+      createdAt: comparison.createdAt.toISOString(),
+      matchCount: comparison.matchCount,
+      warningCount: comparison.warningCount,
+      errorCount: comparison.errorCount,
+      summary: {
+        matches: comparison.matchCount,
+        warnings: comparison.warningCount,
+        errors: comparison.errorCount,
+      },
+      items: comparison.items.map((item: any) => ({
+        productName: item.productName,
+        invoiceValue: item.invoiceValue,
+        deliveryOrderValue: item.deliveryOrderValue,
+        status: item.status as "match" | "warning" | "error",
+        note: item.note || undefined,
+      })),
+      metadata: comparison.metadata.map((meta: any) => ({
+        field: meta.field,
+        invoiceValue: meta.invoiceValue,
+        deliveryOrderValue: meta.deliveryOrderValue,
+        status: meta.status as "match" | "warning" | "error",
+      })),
+      rawData: comparison.rawData,
+    };
+  }
+
+  /**
+   * Get all comparisons for a session
+   */
+  async getComparisonsBySessionId(sessionId: number): Promise<ComparisonResult[]> {
+    const sessionComparisons = await db.query.comparisons.findMany({
+      where: eq(comparisons.sessionId, sessionId),
+      orderBy: desc(comparisons.createdAt),
+      with: {
+        items: true,
+        metadata: true,
+      },
+    });
+
+    return sessionComparisons.map((comparison: any) => ({
+      id: comparison.id.toString(),
+      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
@@ -259,21 +302,24 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map(item => ({
+      items: comparison.items.map((item: any) => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map(meta => ({
+      metadata: comparison.metadata.map((meta: any) => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
         status: meta.status as "match" | "warning" | "error",
       })),
       rawData: comparison.rawData,
-    };
+      matchCount: comparison.matchCount,
+      warningCount: comparison.warningCount,
+      errorCount: comparison.errorCount,
+    }));
   }
 
   /**

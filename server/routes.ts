@@ -573,25 +573,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all recent comparisons (for multiple blocks)
   app.get("/api/comparisons/recent", async (req: Request, res: Response) => {
     try {
-      // Obtener las últimas 10 comparaciones para mostrar resultados de múltiples bloques
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
-      const recentSessions = await storage.getAllSessions(limit);
+      // Obtener la sesión más reciente
+      const recentSessions = await storage.getAllSessions(1);
       
-      // Para cada sesión, obtener su comparación más reciente
-      const comparisons = [];
-      for (const session of recentSessions) {
-        const comparison = await storage.getLatestComparison(session.id);
-        if (comparison) {
-          comparisons.push({
-            ...comparison,
-            sessionInfo: {
-              id: session.id,
-              name: session.invoiceFilename || `Sesión ${session.id}`,
-              createdAt: session.createdAt,
-              status: session.status
-            }
-          });
-        }
+      if (!recentSessions || recentSessions.length === 0) {
+        return res.status(404).json({
+          message: "No sessions found",
+        });
+      }
+      
+      const mostRecentSession = recentSessions[0];
+      
+      // Obtener TODAS las comparaciones de la sesión más reciente (múltiples bloques)
+      const comparisons = await storage.getComparisonsBySessionId(mostRecentSession.id);
+      
+      if (!comparisons || comparisons.length === 0) {
+        return res.status(404).json({
+          message: "No comparisons found for the most recent session",
+        });
       }
 
       return res.json(comparisons);
@@ -755,8 +754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Process files in the background
-// Declaración de la función modificada para aceptar blockId opcional
+// Process files in the background with individual block processing
 async function processFiles(
   invoiceFiles: Express.Multer.File[],
   deliveryOrderFiles: Express.Multer.File[],
@@ -773,234 +771,91 @@ async function processFiles(
     : processingState;
 
   try {
-    // First, process all files with OCR
-    const totalFiles = invoiceFiles.length + deliveryOrderFiles.length;
-    let processedFileCount = 0;
+    // Procesar bloques individualmente: cada par (factura, orden) es un bloque
+    const totalBlocks = Math.min(invoiceFiles.length, deliveryOrderFiles.length);
     
-    // Iniciar simulación de progreso OCR intermedio para proporcionar feedback
-    // durante el procesamiento de cada archivo (ya que puede tomar tiempo)
-    const updateOcrProgressGradually = (fileStartPercent: number, fileEndPercent: number) => {
-      let currentProgress = fileStartPercent;
-      const progressInterval = setInterval(() => {
-        // Incrementar gradualmente hasta casi el final del archivo
-        if (currentProgress < fileEndPercent - 5) {
-          currentProgress += 3;
-          state.ocrProgress = Math.min(currentProgress, 99); // Nunca llegar a 100 hasta completar realmente
-          console.log(`Actualizando progreso de OCR simulado: ${state.ocrProgress}% para bloque ${blockId || "principal"}`);
-        } else {
-          clearInterval(progressInterval);
-        }
-      }, 800);
+    console.log(`Procesando ${totalBlocks} bloques individuales para la sesión ${sessionId}`);
+    
+    for (let blockIndex = 0; blockIndex < totalBlocks; blockIndex++) {
+      const invoiceFile = invoiceFiles[blockIndex];
+      const deliveryFile = deliveryOrderFiles[blockIndex];
       
-      return () => {
-        clearInterval(progressInterval);
-      };
-    };
-
-    // Process invoice files
-    let invoiceText = "";
-    for (let i = 0; i < invoiceFiles.length; i++) {
-      const file = invoiceFiles[i];
-      // Update processing state
-      const fileIndex = state.files.findIndex(
-        (f) => f.name === file.originalname && f.type === "invoice"
-      );
-      if (fileIndex !== -1) {
-        state.files[fileIndex].status = "processing";
-      }
-      state.currentOcrFile = file.originalname;
+      console.log(`Procesando bloque ${blockIndex + 1}/${totalBlocks}: ${invoiceFile.originalname} vs ${deliveryFile.originalname}`);
       
-      // Calcular el progreso inicial y final para este archivo
-      const fileStartPercent = Math.floor((processedFileCount / totalFiles) * 100);
-      const fileEndPercent = Math.floor(((processedFileCount + 1) / totalFiles) * 100);
-      state.ocrProgress = fileStartPercent;
+      // Actualizar progreso por bloque
+      const blockStartPercent = Math.floor((blockIndex / totalBlocks) * 100);
+      const blockEndPercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
       
-      // Iniciar simulación de progreso para este archivo
-      const stopProgress = updateOcrProgressGradually(fileStartPercent, fileEndPercent);
-
-      // Process the file
-      console.log(`Procesando archivo de factura: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
-      const { text, error } = await ocrService.extractText(
-        file.path
-      );
+      state.ocrProgress = blockStartPercent;
+      state.currentOcrFile = `Bloque ${blockIndex + 1}: ${invoiceFile.originalname}`;
       
-      // Detener la simulación de progreso
-      stopProgress();
-      
-      if (error) {
-        console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
-        throw new Error(`OCR error: ${error}`);
+      // Procesar OCR para este bloque específico
+      console.log(`OCR: Procesando factura ${invoiceFile.originalname}`);
+      const { text: invoiceText, error: invoiceError } = await ocrService.extractText(invoiceFile.path);
+      if (invoiceError) {
+        throw new Error(`OCR error en factura: ${invoiceError}`);
       }
       
-      console.log(`Texto extraído de la factura ${file.originalname}: ${text.substring(0, 100)}...`);
-
-      // Update processed text
-      invoiceText += text + "\n\n";
-
-      // Update processing state
-      processedFileCount++;
-      state.ocrProgress = fileEndPercent;
-      if (fileIndex !== -1) {
-        state.files[fileIndex].status = "completed";
-      }
-      processedFiles.push(file.path);
-    }
-
-    // Process delivery order files
-    let deliveryOrderText = "";
-    for (let i = 0; i < deliveryOrderFiles.length; i++) {
-      const file = deliveryOrderFiles[i];
-      // Update processing state
-      const fileIndex = state.files.findIndex(
-        (f) => f.name === file.originalname && f.type === "deliveryOrder"
-      );
-      if (fileIndex !== -1) {
-        state.files[fileIndex].status = "processing";
-      }
-      state.currentOcrFile = file.originalname;
-      
-      // Calcular el progreso inicial y final para este archivo
-      const fileStartPercent = Math.floor((processedFileCount / totalFiles) * 100);
-      const fileEndPercent = Math.floor(((processedFileCount + 1) / totalFiles) * 100);
-      state.ocrProgress = fileStartPercent;
-      
-      // Iniciar simulación de progreso para este archivo
-      const stopProgress = updateOcrProgressGradually(fileStartPercent, fileEndPercent);
-
-      // Process the file
-      console.log(`Procesando archivo de orden de entrega: ${file.originalname} (${file.path}) para bloque ${blockId || "principal"}`);
-      const { text, error } = await ocrService.extractText(
-        file.path
-      );
-      
-      // Detener la simulación de progreso
-      stopProgress();
-      
-      if (error) {
-        console.error(`Error en OCR para el archivo ${file.originalname}: ${error}`);
-        throw new Error(`OCR error: ${error}`);
+      console.log(`OCR: Procesando orden de entrega ${deliveryFile.originalname}`);
+      const { text: deliveryText, error: deliveryError } = await ocrService.extractText(deliveryFile.path);
+      if (deliveryError) {
+        throw new Error(`OCR error en orden de entrega: ${deliveryError}`);
       }
       
-      console.log(`Texto extraído de orden de entrega ${file.originalname}: ${text.substring(0, 100)}...`);
-
-      // Update processed text
-      deliveryOrderText += text + "\n\n";
-
-      // Update processing state
-      processedFileCount++;
-      state.ocrProgress = fileEndPercent;
-      if (fileIndex !== -1) {
-        state.files[fileIndex].status = "completed";
-      }
-      processedFiles.push(file.path);
-    }
-
-    // Start AI analysis
-    state.aiProgress = 5;
-    
-    // Define etapas claras del procesamiento de IA para mostrar progreso más detallado
-    const aiStages = [
-      { stage: "Inicializando análisis de IA", progress: 5 },
-      { stage: "Preparando datos para comparación", progress: 15 },
-      { stage: "Procesando texto de facturas", progress: 25 },
-      { stage: "Procesando texto de órdenes de entrega", progress: 35 },
-      { stage: "Extrayendo entidades y cantidades", progress: 45 },
-      { stage: "Aplicando análisis semántico", progress: 60 },
-      { stage: "Generando comparación detallada", progress: 75 },
-      { stage: "Finalizando el análisis", progress: 85 }
-    ];
-    
-    // Crear una función que avance por las etapas de forma gradual y realista
-    let currentStageIndex = 0;
-    
-    // Esta función actualiza el progreso y muestra la etapa actual al usuario
-    const updateAiProgressGradually = () => {
-      const progressInterval = setInterval(() => {
-        if (currentStageIndex < aiStages.length) {
-          const currentStage = aiStages[currentStageIndex];
-          state.aiProgress = currentStage.progress;
-          // Guardar también el nombre de la etapa actual para mostrarla al usuario
-          state.currentAiStage = currentStage.stage;
-          console.log(`[AI] Etapa: ${currentStage.stage}, Progreso: ${currentStage.progress}% para bloque ${blockId || "principal"}`);
-          currentStageIndex++;
-        } else {
-          clearInterval(progressInterval);
-        }
-      }, 1200); // Intervalos más largos para que el usuario pueda leer cada etapa
+      processedFiles.push(invoiceFile.path, deliveryFile.path);
       
-      return () => clearInterval(progressInterval);
-    };
-    
-    // Iniciar la simulación de progreso por etapas
-    const stopAiProgress = updateAiProgressGradually();
-    
-    let comparisonResult;
-    try {
-      // Perform comparison
-      comparisonResult = await matcherService.compareDocuments(
+      // Actualizar progreso OCR
+      state.ocrProgress = Math.floor(blockStartPercent + (blockEndPercent - blockStartPercent) * 0.7);
+      
+      // Iniciar análisis IA para este bloque
+      state.aiProgress = blockStartPercent;
+      state.currentAiStage = `Comparando bloque ${blockIndex + 1}/${totalBlocks}`;
+      
+      console.log(`IA: Comparando documentos del bloque ${blockIndex + 1}`);
+      
+      // Realizar comparación SOLO para este bloque individual
+      const comparisonResult = await matcherService.compareDocuments(
         invoiceText,
-        deliveryOrderText,
-        invoiceFiles[0].originalname,
-        deliveryOrderFiles[0].originalname
+        deliveryText,
+        invoiceFile.originalname,
+        deliveryFile.originalname
       );
       
-      // Detener la simulación de progreso
-      stopAiProgress();
-      
-      // Update AI progress to near complete
-      state.aiProgress = 90;
-      state.currentAiStage = "Finalizando y guardando resultados";
-    } catch (error) {
-      // Detener la simulación de progreso en caso de error
-      stopAiProgress();
-      throw error;
-    }
-
-    if (comparisonResult) {
       // Obtener la sesión para recuperar el userId
       const session = await storage.getSession(sessionId);
       
-      // Save comparison result con el userId si está disponible
+      // Guardar el resultado de este bloque específico como una comparación separada
       await storage.saveComparisonResult(sessionId, comparisonResult, session?.userId || undefined);
-    } else {
-      throw new Error("No se pudo generar el resultado de la comparación");
+      
+      console.log(`Bloque ${blockIndex + 1} completado y guardado como comparación individual`);
+      
+      // Actualizar progreso final del bloque
+      state.ocrProgress = blockEndPercent;
+      state.aiProgress = blockEndPercent;
     }
 
-    // Update AI progress to complete
-    state.aiProgress = 100;
-
-    // Update session status
+    // Finalizar procesamiento
     await storage.updateSessionStatus(sessionId, "completed");
-
-    // Clean up processed files
+    
+    // Limpiar archivos procesados
     await ocrService.cleanupFiles(processedFiles);
 
-    // Reset processing state asegurando valores correctos
+    // Resetear estado de procesamiento
     state.isProcessing = false;
     state.ocrProgress = 100;
     state.aiProgress = 100;
     state.currentOcrFile = undefined;
     state.currentAiStage = "Procesamiento completado";
     
-    console.log("BACKEND: Proceso finalizado completamente, estado actualizado:", {
-      sessionId,
-      blockId: blockId || "principal",
-      estado: {
-        isProcessing: state.isProcessing,
-        ocrProgress: state.ocrProgress,
-        aiProgress: state.aiProgress
-      },
-      tiempo: new Date().toISOString()
-    });
+    console.log(`Procesamiento completado: ${totalBlocks} bloques procesados como comparaciones individuales para sesión ${sessionId}`);
     
-    // Si este es un bloque específico, podemos eliminarlo de la colección de bloques
-    // después de completar para liberar memoria
+    // Limpiar estado del bloque si corresponde
     if (blockId && processingBlocks[blockId]) {
-      console.log(`Bloque de comparación ${blockId} completado. Eliminando de la memoria.`);
       delete processingBlocks[blockId];
     }
+
   } catch (error) {
-    console.error(`Error processing files for block ${blockId || "principal"}:`, error);
+    console.error(`Error processing files for session ${sessionId}:`, error);
     
     // Update processing state to indicate error
     state.isProcessing = false;
@@ -1015,7 +870,7 @@ async function processFiles(
     
     // Clean up processed files
     if (processedFiles.length > 0) {
-      ocrService.cleanupFiles(processedFiles).catch((cleanupError) => {
+      ocrService.cleanupFiles(processedFiles).catch((cleanupError: any) => {
         console.error("Error cleaning up files:", cleanupError);
       });
     }
