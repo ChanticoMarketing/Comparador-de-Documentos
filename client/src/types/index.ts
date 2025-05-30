@@ -24,6 +24,7 @@ export interface ProcessingStatus {
   isProcessing: boolean;  // Indica si hay un procesamiento activo en curso
   error?: string;         // Error opcional si algo salió mal
   blockId?: string;       // Identificador único del bloque de comparación (si aplica)
+  blockName?: string;     // Nombre descriptivo del bloque basado en el archivo de factura
   activeBlocksCount?: number; // Número de bloques activos en procesamiento
   blockIds?: string[];    // Lista de IDs de bloques activos
 }

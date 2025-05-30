@@ -29,6 +29,7 @@ interface ProcessingState {
   isProcessing: boolean;
   error?: string;
   blockId?: string; // Identificador único del bloque de comparación
+  blockName?: string; // Nombre descriptivo del bloque basado en el archivo de factura
 }
 
 // Ahora mantenemos un registro de múltiples bloques de procesamiento
@@ -230,6 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isProcessing: true,
           error: undefined,
           blockId: blockId,
+          blockName: files.invoices[0]?.originalname || `Bloque ${blockId.slice(-6)}`,
         };
 
         // Agregar archivos al estado de procesamiento del bloque
@@ -340,6 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isProcessing: blockState.isProcessing,
         error: blockState.error,
         blockId: blockId,
+        blockName: blockState.blockName,
       });
     }
     

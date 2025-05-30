@@ -9,6 +9,28 @@ import { ProcessingStatus, FileStatus } from "@/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
+// Componente para mostrar el nombre descriptivo del bloque
+function BlockNameDisplay({ blockId }: { blockId: string }) {
+  const { data: blockData } = useQuery<ProcessingStatus>({
+    queryKey: [`/api/processing/status`, { blockId }],
+    refetchInterval: 2000,
+  });
+
+  const displayName = blockData?.blockName || `Bloque ${blockId.slice(-6)}`;
+  
+  // Mostrar solo el nombre del archivo sin la extensión para que sea más limpio
+  const cleanName = displayName.includes('.') 
+    ? displayName.substring(0, displayName.lastIndexOf('.'))
+    : displayName;
+  
+  // Limitar la longitud para que quepa en la pestaña
+  const shortName = cleanName.length > 15 
+    ? cleanName.substring(0, 15) + "..."
+    : cleanName;
+  
+  return <span title={displayName}>{shortName}</span>;
+}
+
 // Componente para mostrar un único bloque de procesamiento
 function ProcessingBlock({ blockId }: { blockId?: string }) {
   const { toast } = useToast();
@@ -375,7 +397,7 @@ export function ProcessingSection() {
                   value={blockId}
                   className="text-gray-300 data-[state=active]:bg-gray-700"
                 >
-                  Bloque {blockId.substring(blockId.lastIndexOf('-') + 1, blockId.length).slice(0, 6)}
+                  <BlockNameDisplay blockId={blockId} />
                 </TabsTrigger>
               ))}
             </TabsList>
