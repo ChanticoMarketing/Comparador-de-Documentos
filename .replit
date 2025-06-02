@@ -17,3 +17,17 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "cloudrun"
+run = ["sh", "-c", "node index.js"]
+build = ["sh", "-c", "npm install"]
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 39883050
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node index.js"

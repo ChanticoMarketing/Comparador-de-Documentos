@@ -69,7 +69,7 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", () => {
     log(`Servidor OCR Intelligence iniciado en puerto ${port}`);
     log("Aplicación OCR Intelligence lista para usar");
-    log(`Acceda a la aplicación a través de la pestaña WebView o en http://localhost:${port}`);
+    log(`Acceda a la aplicación a través de la pestaña WebView o en http://0.0.0.0:${port}`);
   });
 
 })();
