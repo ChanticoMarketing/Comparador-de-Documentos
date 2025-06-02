@@ -35,6 +35,11 @@ interface ProcessingState {
 // Ahora mantenemos un registro de múltiples bloques de procesamiento
 const processingBlocks: Record<string, ProcessingState> = {};
 
+// Sesión compartida para todos los bloques de un procesamiento batch
+let sharedSessionId: number | null = null;
+let sharedSessionStartTime: number | null = null;
+const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+
 // Estado principal para compatibilidad con código existente
 const processingState: ProcessingState = {
   ocrProgress: 0,
@@ -262,17 +267,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Obtener el ID del usuario si está autenticado
         const userId = getUserId(req as AuthRequest) || undefined;
         
-        // Create a new session
-        const session = await storage.createSession(
-          files.invoices[0].originalname,
-          files.deliveryOrders[0].originalname,
-          userId
-        );
-        blockState.sessionId = session.id;
-        processingState.sessionId = session.id;
+        // Verificar si hay una sesión compartida válida o crear una nueva
+        const now = Date.now();
+        let sessionId: number;
+        
+        if (sharedSessionId && sharedSessionStartTime && (now - sharedSessionStartTime < SESSION_TIMEOUT)) {
+          // Reutilizar sesión compartida existente
+          sessionId = sharedSessionId;
+          console.log(`Reutilizando sesión compartida: ${sessionId}`);
+        } else {
+          // Crear nueva sesión compartida
+          const session = await storage.createSession(
+            `Procesamiento batch - ${files.invoices[0].originalname}`,
+            `Múltiples archivos - ${files.deliveryOrders[0].originalname}`,
+            userId
+          );
+          sharedSessionId = session.id;
+          sharedSessionStartTime = now;
+          sessionId = session.id;
+          console.log(`Nueva sesión compartida creada: ${sessionId}`);
+        }
+        
+        blockState.sessionId = sessionId;
+        processingState.sessionId = sessionId;
 
         // Start processing in the background
-        processFiles(files.invoices, files.deliveryOrders, session.id, blockId).catch(
+        processFiles(files.invoices, files.deliveryOrders, sessionId, blockId).catch(
           (error) => {
             const errorMsg = error instanceof Error ? error.message : String(error);
             console.error(`Error processing files for block ${blockId}:`, errorMsg);
@@ -290,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             processingState.error = `Error processing files: ${errorMsg}`;
             // Update session status to error
             storage.updateSessionStatus(
-              session.id,
+              sessionId,
               "error",
               errorMsg
             ).catch((err) => {
@@ -302,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.status(202).json({
           message: "Files uploaded successfully, processing started",
-          sessionId: session.id,
+          sessionId: sessionId,
         });
       } catch (error) {
         console.error("Error uploading files:", error);
@@ -464,6 +484,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           delete processingBlocks[id];
         }
       });
+      
+      // Limpiar sesión compartida
+      sharedSessionId = null;
+      sharedSessionStartTime = null;
       
       // Actualizar el estado principal si está activo
       if (processingState.isProcessing) {
