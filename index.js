@@ -3,6 +3,7 @@ console.log("La aplicación estará disponible en la pestaña 'Webview'");
 
 // Usar una variable de entorno específica para Replit
 process.env.PORT = process.env.PORT || 3000;
+process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
 // Ejecutar el script de inicio usando ESM
 import { spawn } from 'child_process';
