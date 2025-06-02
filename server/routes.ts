@@ -79,8 +79,15 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Health check endpoint - moved to /health
+  // Health check endpoint for deployment
   app.get("/health", (req: Request, res: Response) => {
+    res.status(200).json({ status: "OK", service: "OCR Intelligence" });
+  });
+
+  // Root endpoint for deployment health check
+  app.get("/", (req: Request, res: Response) => {
+    // In production, this will be overridden by static file serving
+    // In development or if static files fail, show basic status
     res.status(200).json({ status: "OK", service: "OCR Intelligence" });
   });
 

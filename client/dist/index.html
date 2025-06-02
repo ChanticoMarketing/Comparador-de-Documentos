@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Intelligence</title>
+    <link rel="stylesheet" href="/assets/index.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            max-width: 600px;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .feature {
+            background: rgba(255,255,255,0.1);
+            padding: 1.5rem;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        .spinner {
+            margin: 2rem auto;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-left: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OCR Intelligence</h1>
+        <p>Sistema avanzado de reconciliación de facturas con OCR e IA</p>
+        
+        <div class="spinner"></div>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🔍 OCR Avanzado</h3>
+                <p>Extracción inteligente de texto de documentos</p>
+            </div>
+            <div class="feature">
+                <h3>🤖 IA Comparativa</h3>
+                <p>Reconciliación automática de facturas y albaranes</p>
+            </div>
+            <div class="feature">
+                <h3>📊 Reportes</h3>
+                <p>Informes detallados de comparación</p>
+            </div>
+        </div>
+        
+        <p style="margin-top: 2rem; font-size: 1rem; opacity: 0.7;">
+            Cargando aplicación...
+        </p>
+    </div>
+
+    <script src="/assets/index.js"></script>
+    <script>
+        // Verificar si la aplicación React está disponible
+        setTimeout(() => {
+            fetch('/api/auth/me')
+                .then(() => {
+                    console.log('API disponible, recargando...');
+                    window.location.reload();
+                })
+                .catch(() => {
+                    console.log('Esperando que el servidor esté listo...');
+                    setTimeout(() => window.location.reload(), 3000);
+                });
+        }, 2000);
+    </script>
+</body>
+</html>
