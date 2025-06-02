@@ -68,7 +68,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "../client/dist");
+  const distPath = path.resolve(import.meta.dirname, "../client/dist");
 
   console.log("Checking for build directory at:", distPath);
   console.log("Build directory exists:", fs.existsSync(distPath));
