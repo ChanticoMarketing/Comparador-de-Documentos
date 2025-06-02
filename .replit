@@ -18,7 +18,7 @@ channel = "stable-24_05"
 [deployment]
 deploymentTarget = "cloudrun"
 run = ["sh", "-c", "node index.js"]
-build = ["sh", "-c", "npm install"]
+build = ["sh", "-c", "npm run build"]
 
 [workflows]
 runButton = "Run"
