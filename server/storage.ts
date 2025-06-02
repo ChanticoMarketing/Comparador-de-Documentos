@@ -12,7 +12,7 @@ import {
   ComparisonItem,
   ComparisonMetadata
 } from "@shared/schema";
-import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types";
+import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types/index";
 
 /**
  * Storage service for the application
@@ -339,9 +339,13 @@ export class StorageService {
 
     return comparisonList.map((comparison: Comparison & { items: ComparisonItem[]; metadata: ComparisonMetadata[] }): ComparisonResult => ({
       id: comparison.id.toString(),
+      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
+      matchCount: comparison.matchCount,
+      warningCount: comparison.warningCount,
+      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
