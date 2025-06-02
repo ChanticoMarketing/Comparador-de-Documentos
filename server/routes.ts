@@ -600,60 +600,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all recent comparisons (for multiple blocks)
+  // Get comparisons from the most recent session (for multiple blocks)
   app.get("/api/comparisons/recent", async (req: Request, res: Response) => {
     try {
-      // Obtener las últimas 5 comparaciones independientemente de la sesión
-      const allComparisons = await db.query.comparisons.findMany({
+      // Primero obtener la sesión más reciente
+      const latestComparison = await db.query.comparisons.findFirst({
         orderBy: desc(comparisons.createdAt),
-        limit: 10,
         with: {
-          items: true,
-          metadata: true,
+          session: true,
         },
       });
       
-      console.log(`DEBUG: Total de comparaciones encontradas: ${allComparisons.length}`);
+      console.log("DEBUG: Comparación más reciente:", latestComparison ? {
+        id: latestComparison.id,
+        sessionId: latestComparison.sessionId,
+        invoiceFilename: latestComparison.invoiceFilename,
+        createdAt: latestComparison.createdAt
+      } : "No encontrada");
       
-      if (allComparisons.length === 0) {
-        return res.status(404).json({
-          message: "No comparisons found",
-        });
+      if (!latestComparison || !latestComparison.sessionId) {
+        console.log("DEBUG: No hay comparaciones o sesiones disponibles");
+        return res.json([]);
       }
-
-      // Convertir al formato esperado por el frontend
-      const formattedComparisons = allComparisons.map((comparison: any) => ({
-        id: comparison.id.toString(),
-        sessionId: comparison.sessionId,
-        invoiceFilename: comparison.invoiceFilename,
-        deliveryOrderFilename: comparison.deliveryOrderFilename,
-        createdAt: comparison.createdAt.toISOString(),
-        summary: {
-          matches: comparison.matchCount,
-          warnings: comparison.warningCount,
-          errors: comparison.errorCount,
-        },
-        items: comparison.items.map((item: any) => ({
-          productName: item.productName,
-          invoiceValue: item.invoiceValue,
-          deliveryOrderValue: item.deliveryOrderValue,
-          status: item.status as "match" | "warning" | "error",
-          note: item.note || undefined,
-        })),
-        metadata: comparison.metadata.map((meta: any) => ({
-          field: meta.field,
-          invoiceValue: meta.invoiceValue,
-          deliveryOrderValue: meta.deliveryOrderValue,
-          status: meta.status as "match" | "warning" | "error",
-        })),
-        rawData: comparison.rawData,
-        matchCount: comparison.matchCount,
-        warningCount: comparison.warningCount,
-        errorCount: comparison.errorCount,
-      }));
-
-      console.log(`DEBUG: Comparaciones formateadas: ${formattedComparisons.length}`);
-      return res.json(formattedComparisons);
+      
+      // Obtener todas las comparaciones de la sesión más reciente
+      const sessionComparisons = await storage.getComparisonsBySessionId(latestComparison.sessionId);
+      
+      console.log(`DEBUG: Encontradas ${sessionComparisons.length} comparaciones de la sesión ${latestComparison.sessionId}`);
+      console.log("DEBUG: IDs de comparaciones:", sessionComparisons.map(c => ({ id: c.id, invoice: c.invoiceFilename })));
+      
+      return res.json(sessionComparisons);
     } catch (error) {
       console.error("Error fetching recent comparisons:", error);
       return res.status(500).json({
