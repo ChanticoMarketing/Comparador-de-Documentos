@@ -9,7 +9,7 @@ if (!dbUrl) {
   throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
 }
 
-let db: ReturnType<typeof import("drizzle-orm").drizzle>;
+let db: any;
 
 if (dbUrl.includes("localhost") || dbUrl.includes("127.0.0.1")) {
   // Use local Postgres (pg)

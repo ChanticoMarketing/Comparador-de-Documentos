@@ -222,9 +222,13 @@ export class MatcherService {
 
     return {
       id,
+      sessionId: 0, // Will be set when saving to database
       invoiceFilename,
       deliveryOrderFilename,
       createdAt,
+      matchCount: summary.matches,
+      warningCount: summary.warnings,
+      errorCount: summary.errors,
       summary,
       items,
       metadata,

@@ -116,7 +116,7 @@ export async function exportToPdf(comparison: ComparisonResult): Promise<Buffer>
   });
 
   await browser.close();
-  return pdfBuffer;
+  return Buffer.from(pdfBuffer);
 }
 
 /**

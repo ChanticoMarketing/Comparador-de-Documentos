@@ -168,14 +168,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any) => ({
+      items: comparison.items.map((item: any): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any) => ({
+      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -215,14 +215,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any) => ({
+      items: comparison.items.map((item: any): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any) => ({
+      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -261,14 +261,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any) => ({
+      items: comparison.items.map((item: any): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any) => ({
+      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -302,14 +302,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any) => ({
+      items: comparison.items.map((item: any): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any) => ({
+      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
