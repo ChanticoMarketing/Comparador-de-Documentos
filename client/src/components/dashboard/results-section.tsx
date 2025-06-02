@@ -29,6 +29,7 @@ type ComparisonWithSession = ComparisonResult & {
 export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
   const [showMultipleResults, setShowMultipleResults] = useState(false);
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const { toast } = useToast();
 
   // Query para una comparación específica
@@ -49,10 +50,29 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   });
 
   // Determinar qué datos usar
-  const data = comparisonId ? singleComparisonQuery.data : multipleComparisonsQuery.data?.[0];
   const allComparisons = comparisonId ? (singleComparisonQuery.data ? [singleComparisonQuery.data] : []) : multipleComparisonsQuery.data || [];
+  const data = comparisonId ? singleComparisonQuery.data : allComparisons[currentBlockIndex];
   const isLoading = comparisonId ? singleComparisonQuery.isLoading : multipleComparisonsQuery.isLoading;
   const error = comparisonId ? singleComparisonQuery.error : multipleComparisonsQuery.error;
+  
+  // Funciones de navegación entre bloques
+  const goToNextBlock = () => {
+    if (currentBlockIndex < allComparisons.length - 1) {
+      setCurrentBlockIndex(currentBlockIndex + 1);
+    }
+  };
+  
+  const goToPrevBlock = () => {
+    if (currentBlockIndex > 0) {
+      setCurrentBlockIndex(currentBlockIndex - 1);
+    }
+  };
+  
+  const goToBlock = (index: number) => {
+    if (index >= 0 && index < allComparisons.length) {
+      setCurrentBlockIndex(index);
+    }
+  };
   
   // Efecto para detectar y registrar actualizaciones de datos
   useEffect(() => {
@@ -313,25 +333,94 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
           <div>
             <CardTitle className="text-lg font-medium text-white">
               Resultados de la comparación
+              {!comparisonId && allComparisons.length > 1 && (
+                <span className="ml-2 text-sm font-normal text-blue-400">
+                  Bloque {currentBlockIndex + 1} de {allComparisons.length}
+                </span>
+              )}
             </CardTitle>
             <CardDescription className="text-gray-400">
               {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
-              {!comparisonId && allComparisons.length > 1 && (
-                <span className="ml-2 text-blue-400">({allComparisons.length} bloques procesados)</span>
-              )}
             </CardDescription>
           </div>
+          
+          {/* Navegación entre bloques */}
           {!comparisonId && allComparisons.length > 1 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowMultipleResults(!showMultipleResults)}
-              className="text-blue-400 border-blue-600 hover:bg-blue-900"
-            >
-              {showMultipleResults ? 'Mostrar solo último' : 'Ver todos los bloques'}
-            </Button>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPrevBlock}
+                  disabled={currentBlockIndex === 0}
+                  className="h-8 w-8 p-0"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </Button>
+                
+                {/* Indicadores de página */}
+                <div className="flex space-x-1">
+                  {allComparisons.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => goToBlock(index)}
+                      className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
+                        index === currentBlockIndex
+                          ? "bg-primary-600 text-white"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToNextBlock}
+                  disabled={currentBlockIndex === allComparisons.length - 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Button>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  className="bg-blue-700 hover:bg-blue-800 border-blue-900 text-white text-xs"
+                  onClick={() => window.open(`/api/comparisons/${data.id}/export?format=pdf`, '_blank')}
+                  disabled={!data?.id}
+                  size="sm"
+                >
+                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  className="bg-green-700 hover:bg-green-800 border-green-900 text-white text-xs"
+                  onClick={() => window.open(`/api/comparisons/${data.id}/export?format=excel`, '_blank')}
+                  disabled={!data?.id}
+                  size="sm"
+                >
+                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Excel
+                </Button>
+              </div>
+            </div>
           )}
-          {!comparisonId && (
+          
+          {/* Botones de exportación para vista de comparación única */}
+          {comparisonId && (
             <div className="flex space-x-2">
               <Button
                 variant="outline"
@@ -363,51 +452,6 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       </CardHeader>
       
       <CardContent className="p-6">
-        {/* Mostrar múltiples resultados si está activado y hay varios bloques */}
-        {!comparisonId && showMultipleResults && allComparisons.length > 1 ? (
-          <div className="space-y-6">
-            <h3 className="text-lg font-medium text-white mb-4">
-              Resultados de todos los bloques procesados ({allComparisons.length})
-            </h3>
-            {allComparisons.map((comparison, index) => (
-              <div key={comparison.id} className="border border-gray-600 rounded-lg p-4 bg-gray-750">
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-medium text-white">
-                    Bloque {index + 1}: {comparison.invoiceFilename || `Comparación ${comparison.id}`}
-                  </h4>
-                  <span className="text-sm text-gray-400">
-                    {new Date(comparison.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-gray-300">Coincidencias: {comparison.matchCount || 0}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                    <span className="text-gray-300">Advertencias: {comparison.warningCount || 0}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                    <span className="text-gray-300">Discrepancias: {comparison.errorCount || 0}</span>
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.location.href = `/comparison/${comparison.id}`}
-                    className="text-blue-400 border-blue-600 hover:bg-blue-900"
-                  >
-                    Ver detalles
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <>
             {/* Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gray-700 rounded-lg p-4">
@@ -688,9 +732,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               )}
             </Button>
           </div>
-            </div>
-          </>
-        )}
+        </div>
       </CardContent>
     </Card>
   );
