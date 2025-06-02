@@ -79,8 +79,8 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Health check endpoint for Autoscale deployments
-  app.get("/", (req: Request, res: Response) => {
+  // Health check endpoint - moved to /health
+  app.get("/health", (req: Request, res: Response) => {
     res.status(200).json({ status: "OK", service: "OCR Intelligence" });
   });
 
