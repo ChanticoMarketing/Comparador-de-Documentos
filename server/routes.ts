@@ -84,12 +84,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(200).json({ status: "OK", service: "OCR Intelligence" });
   });
 
-  // Root endpoint for deployment health check
-  app.get("/", (req: Request, res: Response) => {
-    // In production, this will be overridden by static file serving
-    // In development or if static files fail, show basic status
-    res.status(200).json({ status: "OK", service: "OCR Intelligence" });
-  });
+
 
   // Rutas de autenticación
   app.post("/api/auth/register", async (req: Request, res: Response) => {
