@@ -28,7 +28,6 @@ type ComparisonWithSession = ComparisonResult & {
 
 export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
-  const [showMultipleResults, setShowMultipleResults] = useState(false);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const { toast } = useToast();
 
@@ -99,23 +98,22 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "Error al guardar los resultados");
+        throw new Error(`Error ${response.status}: ${errorText}`);
       }
       
-      return await response.json();
+      return response.json();
     },
     onSuccess: () => {
       toast({
         title: "Resultados guardados",
-        description: "Los resultados de la comparación han sido guardados exitosamente",
+        description: "Los resultados de la comparación se han guardado correctamente.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
     },
-    onError: (error: unknown) => {
-      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    onError: (error) => {
+      console.error("Error saving results:", error);
       toast({
-        title: "Error al guardar los resultados",
-        description: errorMessage,
+        title: "Error al guardar",
+        description: "No se pudieron guardar los resultados. Inténtalo de nuevo.",
         variant: "destructive",
       });
     },
@@ -123,36 +121,32 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
 
   const exportMutation = useMutation({
     mutationFn: async (format: "pdf" | "excel") => {
-      if (!data) return null;
+      if (!data) throw new Error("No hay datos para exportar");
       
       const response = await fetch(`/api/comparisons/${data.id}/export?format=${format}`, {
-        method: "GET",
-        credentials: "include",
+        method: 'GET',
+        credentials: 'include',
       });
       
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Error al exportar a ${format.toUpperCase()}`);
+        throw new Error(`Error al exportar ${format}: ${response.statusText}`);
       }
       
-      // Handle file download
       const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `comparison-${data.id}.${format === "pdf" ? "pdf" : "xlsx"}`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `comparacion-${data.id}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-      
-      return true;
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     },
-    onError: (error: unknown) => {
-      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    onError: (error) => {
       toast({
         title: "Error al exportar",
-        description: errorMessage,
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -197,10 +191,12 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   // Function to get status class for highlighting differences
   const getHighlightClass = (status: string) => {
     switch (status) {
+      case "match":
+        return "text-green-300";
       case "warning":
-        return "bg-yellow-900 bg-opacity-30";
+        return "text-yellow-300";
       case "error":
-        return "bg-red-900 bg-opacity-30";
+        return "text-red-300";
       default:
         return "";
     }
@@ -211,120 +207,66 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     switch (status) {
       case "match":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900 text-green-300">
             Coincidente
           </span>
         );
       case "warning":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
             Advertencia
           </span>
         );
       case "error":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-300">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-300">
             Discrepancia
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-900 text-gray-300">
+            Desconocido
+          </span>
+        );
     }
   };
 
-  // Preparar los datos para visualización
-  // Asegurarnos de que tenemos ítems y metadata aunque vengan en formato diferente
-  const items = data.items || [];
+  // Parse results data
+  let items: ResultItem[] = [];
+  let metadata: MetadataItem[] = [];
   
-  // Agrupar los ítems por producto para una mejor visualización
-  const groupedItems = items.reduce((grouped, item) => {
-    const product = item.productName;
-    if (!grouped[product]) {
-      grouped[product] = [];
-    }
-    grouped[product].push(item);
-    return grouped;
-  }, {} as Record<string, ResultItem[]>);
-  
-  // Preparar el resumen
-  let summary = data.summary;
-  
-  // Si no hay summary pero tenemos datos en matchCount, warningCount y errorCount, crear un resumen
-  if (!summary && data.matchCount !== undefined) {
-    summary = {
-      matches: data.matchCount,
-      warnings: data.warningCount,
-      errors: data.errorCount
-    };
-  }
-  
-  // Si aún no hay summary, intentar extraerlo del rawData
-  if (!summary && data.rawData) {
+  // Parse items from rawData
+  if (data.rawData) {
     try {
-      const rawData = typeof data.rawData === 'string' 
-        ? JSON.parse(data.rawData) 
-        : data.rawData;
-        
-      if (rawData.summary) {
-        summary = rawData.summary;
+      const parsedData = typeof data.rawData === 'string' ? JSON.parse(data.rawData) : data.rawData;
+      if (parsedData.items && Array.isArray(parsedData.items)) {
+        items = parsedData.items;
       }
-    } catch (e) {
-      console.error('Error parsing rawData summary:', e);
-    }
-  }
-  
-  // Si todavía no hay summary, crear uno por defecto
-  if (!summary) {
-    summary = {
-      matches: 0,
-      warnings: 0,
-      errors: 0
-    };
-  }
-  
-  // Si los datos vienen del raw_data, intentar extraer metadata
-  let metadata = data.metadata || [];
-  if (metadata.length === 0 && data.rawData && typeof data.rawData === 'object') {
-    // Intentar extraer metadata del rawData si está disponible
-    try {
-      const rawData = typeof data.rawData === 'string' 
-        ? JSON.parse(data.rawData) 
-        : data.rawData;
-        
-      if (rawData.metadata) {
-        metadata = rawData.metadata;
-      }
-    } catch (e) {
-      console.error('Error parsing rawData:', e);
-    }
-  }
-
-  // Si no hay items pero hay rawData, intentar extraerlos de ahí
-  if (items.length === 0 && data.rawData) {
-    try {
-      const rawData = typeof data.rawData === 'string' 
-        ? JSON.parse(data.rawData) 
-        : data.rawData;
-        
-      if (rawData.items) {
-        items.push(...rawData.items);
+      if (parsedData.metadata && Array.isArray(parsedData.metadata)) {
+        metadata = parsedData.metadata;
       }
     } catch (e) {
       console.error('Error parsing rawData items:', e);
     }
   }
+
+  // Calculate summary
+  const summary = {
+    matches: items.filter(item => item.status === "match").length,
+    warnings: items.filter(item => item.status === "warning").length,
+    errors: items.filter(item => item.status === "error").length,
+  };
+
+  // Group items by product name
+  const groupedItems = items.reduce((acc: Record<string, any[]>, item: any) => {
+    const productName = item.productName || "Producto sin nombre";
+    if (!acc[productName]) {
+      acc[productName] = [];
+    }
+    acc[productName].push(item);
+    return acc;
+  }, {});
 
   return (
     <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
@@ -452,8 +394,8 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       </CardHeader>
       
       <CardContent className="p-6">
-            {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 p-2 rounded-md bg-green-900">
