@@ -12,6 +12,9 @@ import fs from "fs";
 import os from "os";
 import { ProcessingStatus, Settings } from "../client/src/types";
 import { exportToPdf, exportToExcel } from "./utils";
+import { db } from "@db";
+import { comparisons } from "@shared/schema";
+import { desc } from "drizzle-orm";
 
 // Global processing state (in a real app, this would be in a database or Redis)
 interface ProcessingState {
@@ -600,27 +603,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all recent comparisons (for multiple blocks)
   app.get("/api/comparisons/recent", async (req: Request, res: Response) => {
     try {
-      // Obtener la sesión más reciente
-      const recentSessions = await storage.getAllSessions(1);
+      // Obtener las últimas 5 comparaciones independientemente de la sesión
+      const allComparisons = await db.query.comparisons.findMany({
+        orderBy: desc(comparisons.createdAt),
+        limit: 10,
+        with: {
+          items: true,
+          metadata: true,
+        },
+      });
       
-      if (!recentSessions || recentSessions.length === 0) {
+      console.log(`DEBUG: Total de comparaciones encontradas: ${allComparisons.length}`);
+      
+      if (allComparisons.length === 0) {
         return res.status(404).json({
-          message: "No sessions found",
-        });
-      }
-      
-      const mostRecentSession = recentSessions[0];
-      
-      // Obtener TODAS las comparaciones de la sesión más reciente (múltiples bloques)
-      const comparisons = await storage.getComparisonsBySessionId(mostRecentSession.id);
-      
-      if (!comparisons || comparisons.length === 0) {
-        return res.status(404).json({
-          message: "No comparisons found for the most recent session",
+          message: "No comparisons found",
         });
       }
 
-      return res.json(comparisons);
+      // Convertir al formato esperado por el frontend
+      const formattedComparisons = allComparisons.map((comparison: any) => ({
+        id: comparison.id.toString(),
+        sessionId: comparison.sessionId,
+        invoiceFilename: comparison.invoiceFilename,
+        deliveryOrderFilename: comparison.deliveryOrderFilename,
+        createdAt: comparison.createdAt.toISOString(),
+        summary: {
+          matches: comparison.matchCount,
+          warnings: comparison.warningCount,
+          errors: comparison.errorCount,
+        },
+        items: comparison.items.map((item: any) => ({
+          productName: item.productName,
+          invoiceValue: item.invoiceValue,
+          deliveryOrderValue: item.deliveryOrderValue,
+          status: item.status as "match" | "warning" | "error",
+          note: item.note || undefined,
+        })),
+        metadata: comparison.metadata.map((meta: any) => ({
+          field: meta.field,
+          invoiceValue: meta.invoiceValue,
+          deliveryOrderValue: meta.deliveryOrderValue,
+          status: meta.status as "match" | "warning" | "error",
+        })),
+        rawData: comparison.rawData,
+        matchCount: comparison.matchCount,
+        warningCount: comparison.warningCount,
+        errorCount: comparison.errorCount,
+      }));
+
+      console.log(`DEBUG: Comparaciones formateadas: ${formattedComparisons.length}`);
+      return res.json(formattedComparisons);
     } catch (error) {
       console.error("Error fetching recent comparisons:", error);
       return res.status(500).json({

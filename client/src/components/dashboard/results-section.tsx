@@ -75,13 +75,16 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   
   // Efecto para detectar y registrar actualizaciones de datos
   useEffect(() => {
-    if (data) {
-      console.log("DIAGNÓSTICO: ResultsSection recibió datos actualizados:", { 
-        id: data.id,
-        time: new Date().toISOString()
-      });
-    }
-  }, [data]);
+    console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", {
+      comparisonId,
+      isLoading,
+      error: error?.message,
+      allComparisons: allComparisons.length,
+      currentData: data?.id,
+      currentBlockIndex,
+      time: new Date().toISOString()
+    });
+  }, [data, allComparisons, currentBlockIndex, isLoading, error]);
 
   const saveResultsMutation = useMutation({
     mutationFn: async () => {

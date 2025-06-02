@@ -25,6 +25,9 @@ export function FileUploadSection() {
     }
   ]);
   
+  // Estado para forzar el reseteo de componentes FileUpload
+  const [fileUploadKey, setFileUploadKey] = useState(Date.now());
+  
   const { toast } = useToast();
 
   // Mutación para subir un bloque específico
