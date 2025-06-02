@@ -8,7 +8,9 @@ import {
   Comparison,
   comparisonItems,
   comparisonMetadata,
-  AppSettings
+  AppSettings,
+  ComparisonItem,
+  ComparisonMetadata
 } from "@shared/schema";
 import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types";
 
@@ -168,14 +170,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any): ResultItem => ({
+      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
+      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -215,14 +217,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any): ResultItem => ({
+      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
+      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -261,14 +263,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any): ResultItem => ({
+      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
+      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -291,7 +293,7 @@ export class StorageService {
       },
     });
 
-    return sessionComparisons.map((comparison: any) => ({
+    return sessionComparisons.map((comparison: Comparison & { items: ComparisonItem[]; metadata: ComparisonMetadata[] }) => ({
       id: comparison.id.toString(),
       sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
@@ -302,14 +304,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: any): ResultItem => ({
+      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: any): MetadataItem => ({
+      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -335,7 +337,7 @@ export class StorageService {
       },
     });
 
-    return comparisonList.map(comparison => ({
+    return comparisonList.map((comparison: Comparison & { items: ComparisonItem[]; metadata: ComparisonMetadata[] }): ComparisonResult => ({
       id: comparison.id.toString(),
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
@@ -345,14 +347,14 @@ export class StorageService {
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map(item => ({
+      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map(meta => ({
+      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
