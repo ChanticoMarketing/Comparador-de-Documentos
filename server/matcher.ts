@@ -122,7 +122,7 @@ export class MatcherService {
   ): string {
     return `
   You will receive two raw text blocks: one from an invoice and one from a delivery order.
-  
+
   Create two lists of products (invoiceList and deliveryOrderList) with the two text inputs with the following structure:
   {
     "productName": "Product name",
@@ -159,20 +159,20 @@ export class MatcherService {
       "errors": 0
     }
   }
-  
+
   Guidelines:
   - Focus **only** on product lines.
   - Consider discrepancies in product name, quantity, and unit (e.g., caja, piezas).
   - Use fuzzy matching for slightly different names (e.g., "agua min 1000 12p" vs "agua mineral 1000ml").
   - Match products even if formatting varies or if units need conversion (e.g., "1 caja" vs "12 piezas").
   - Ignore all metadata and document headers or footers.
-  
+
   INVOICE TEXT:
   ${invoiceText}
-  
+
   DELIVERY ORDER TEXT:
   ${deliveryOrderText}
-  
+
   Return only the JSON object. Do not include explanations or any additional text.
   `;
   }

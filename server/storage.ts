@@ -63,7 +63,7 @@ export class StorageService {
     const result = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId)
     });
-    
+
     return result;
   }
 

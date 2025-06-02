@@ -10,16 +10,16 @@ import ExcelJS from "exceljs";
 export async function exportToPdf(comparison: ComparisonResult): Promise<Buffer> {
   // Create HTML content for the PDF
   const htmlContent = createHtmlReport(comparison);
-  
+
   // Launch a headless browser
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();
-  
+
   // Set content and generate PDF
   await page.setContent(htmlContent);
-  
+
   // Add styles to make it look good when printed
   await page.addStyleTag({
     content: `
@@ -102,7 +102,7 @@ export async function exportToPdf(comparison: ComparisonResult): Promise<Buffer>
       }
     `
   });
-  
+
   // Generate PDF
   const pdfBuffer = await page.pdf({
     format: 'A4',
@@ -114,7 +114,7 @@ export async function exportToPdf(comparison: ComparisonResult): Promise<Buffer>
       left: '20px'
     }
   });
-  
+
   await browser.close();
   return pdfBuffer;
 }
@@ -129,42 +129,42 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'OCR-Matcher AI';
   workbook.created = new Date();
-  
+
   // Add a summary worksheet
   const summarySheet = workbook.addWorksheet('Resumen');
-  
+
   // Add title and subtitle
   summarySheet.mergeCells('A1:E1');
   const titleCell = summarySheet.getCell('A1');
   titleCell.value = 'Reporte de Comparación';
   titleCell.font = { size: 16, bold: true };
   titleCell.alignment = { horizontal: 'center' };
-  
+
   summarySheet.mergeCells('A2:E2');
   const subtitleCell = summarySheet.getCell('A2');
   subtitleCell.value = `${comparison.invoiceFilename} vs ${comparison.deliveryOrderFilename}`;
   subtitleCell.font = { size: 12 };
   subtitleCell.alignment = { horizontal: 'center' };
-  
+
   // Add date
   summarySheet.mergeCells('A3:E3');
   const dateCell = summarySheet.getCell('A3');
   dateCell.value = `Fecha: ${new Date(comparison.createdAt).toLocaleDateString()}`;
   dateCell.font = { size: 12 };
   dateCell.alignment = { horizontal: 'center' };
-  
+
   // Add summary
   summarySheet.addRow([]);
   summarySheet.addRow(['Resumen de Resultados']);
   summarySheet.getCell('A5').font = { bold: true, size: 14 };
-  
+
   summarySheet.addRow(['Coincidencias', comparison.summary.matches]);
   summarySheet.addRow(['Advertencias', comparison.summary.warnings]);
   summarySheet.addRow(['Discrepancias', comparison.summary.errors]);
-  
+
   // Add products worksheet
   const productsSheet = workbook.addWorksheet('Productos');
-  
+
   // Add headers
   productsSheet.columns = [
     { header: 'Producto', key: 'product', width: 30 },
@@ -173,7 +173,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
     { header: 'Estado', key: 'status', width: 15 },
     { header: 'Nota', key: 'note', width: 40 }
   ];
-  
+
   // Style the header row
   productsSheet.getRow(1).font = { bold: true };
   productsSheet.getRow(1).fill = {
@@ -181,7 +181,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
     pattern: 'solid',
     fgColor: { argb: 'FFD3D3D3' }
   };
-  
+
   // Add data rows
   comparison.items.forEach(item => {
     const row = productsSheet.addRow([
@@ -191,7 +191,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       getStatusText(item.status),
       item.note || ''
     ]);
-    
+
     // Apply status-based formatting
     const fillColor = getStatusColor(item.status);
     row.getCell('D').fill = {
@@ -199,7 +199,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       pattern: 'solid',
       fgColor: { argb: fillColor }
     };
-    
+
     // Highlight differences
     if (item.status === 'warning' || item.status === 'error') {
       row.getCell('B').fill = {
@@ -214,10 +214,10 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       };
     }
   });
-  
+
   // Add metadata worksheet
   const metadataSheet = workbook.addWorksheet('Metadatos');
-  
+
   // Add headers
   metadataSheet.columns = [
     { header: 'Campo', key: 'field', width: 30 },
@@ -225,7 +225,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
     { header: 'Orden de Entrega', key: 'deliveryOrder', width: 30 },
     { header: 'Estado', key: 'status', width: 15 }
   ];
-  
+
   // Style the header row
   metadataSheet.getRow(1).font = { bold: true };
   metadataSheet.getRow(1).fill = {
@@ -233,7 +233,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
     pattern: 'solid',
     fgColor: { argb: 'FFD3D3D3' }
   };
-  
+
   // Add data rows
   comparison.metadata.forEach(meta => {
     const row = metadataSheet.addRow([
@@ -242,7 +242,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       meta.deliveryOrderValue,
       getStatusText(meta.status)
     ]);
-    
+
     // Apply status-based formatting
     const fillColor = getStatusColor(meta.status);
     row.getCell('D').fill = {
@@ -250,7 +250,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       pattern: 'solid',
       fgColor: { argb: fillColor }
     };
-    
+
     // Highlight differences
     if (meta.status === 'warning' || meta.status === 'error') {
       row.getCell('B').fill = {
@@ -265,9 +265,10 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
       };
     }
   });
-  
+
   // Generate Excel buffer
-  return await workbook.xlsx.writeBuffer();
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 /**
@@ -278,7 +279,7 @@ export async function exportToExcel(comparison: ComparisonResult): Promise<Buffe
 function createHtmlReport(comparison: ComparisonResult): string {
   // Format date
   const reportDate = new Date(comparison.createdAt).toLocaleDateString();
-  
+
   // Create HTML header
   let html = `
     <!DOCTYPE html>
@@ -293,7 +294,7 @@ function createHtmlReport(comparison: ComparisonResult): string {
         <div class="report-subtitle">${comparison.invoiceFilename} vs ${comparison.deliveryOrderFilename}</div>
         <div>Fecha: ${reportDate}</div>
       </div>
-      
+
       <div class="summary-grid">
         <div class="summary-card">
           <h3>Coincidencias</h3>
@@ -308,7 +309,7 @@ function createHtmlReport(comparison: ComparisonResult): string {
           <div>${comparison.summary.errors}</div>
         </div>
       </div>
-      
+
       <h2>Productos</h2>
       <table>
         <thead>
@@ -322,12 +323,12 @@ function createHtmlReport(comparison: ComparisonResult): string {
         </thead>
         <tbody>
   `;
-  
+
   // Add products
   comparison.items.forEach(item => {
     const statusClass = item.status;
     const statusBadgeClass = `status-badge status-${item.status}`;
-    
+
     html += `
       <tr>
         <td>${item.productName}</td>
@@ -338,12 +339,12 @@ function createHtmlReport(comparison: ComparisonResult): string {
       </tr>
     `;
   });
-  
+
   // Close products table and add metadata table
   html += `
         </tbody>
       </table>
-      
+
       <h2>Metadatos</h2>
       <table>
         <thead>
@@ -356,12 +357,12 @@ function createHtmlReport(comparison: ComparisonResult): string {
         </thead>
         <tbody>
   `;
-  
+
   // Add metadata
   comparison.metadata.forEach(meta => {
     const statusClass = meta.status;
     const statusBadgeClass = `status-badge status-${meta.status}`;
-    
+
     html += `
       <tr>
         <td>${meta.field}</td>
@@ -371,19 +372,19 @@ function createHtmlReport(comparison: ComparisonResult): string {
       </tr>
     `;
   });
-  
+
   // Close the HTML
   html += `
         </tbody>
       </table>
-      
+
       <div class="report-footer">
         <p>Generado por OCR-Matcher AI • ${new Date().toLocaleString()}</p>
       </div>
     </body>
     </html>
   `;
-  
+
   return html;
 }
 
@@ -438,4 +439,3 @@ export function normalizeProductString(str: string): string {
     .replace(/[^a-z0-9]+/g, " ")                                              // Remove special characters
     .trim()                                          // optional: sort words
 }
-
