@@ -622,15 +622,17 @@ async function processFiles(
       console.log(`Factura: ${invoiceFile.originalname}`);
       console.log(`Orden de entrega: ${deliveryFile.originalname}`);
       
-      // **Crear sesión independiente para este par**
-      console.log(`Creando nueva sesión para par ${i + 1}: ${invoiceFile.originalname} + ${deliveryFile.originalname}`);
+      // **Crear sesión independiente para este par específico**
+      console.log(`Creando nueva sesión independiente para par ${i + 1}: ${invoiceFile.originalname} + ${deliveryFile.originalname}`);
+      
+      // Forzar creación de sesión única para este par específico
       const session = await storage.createSession(
         invoiceFile.originalname,
         deliveryFile.originalname,
         userId
       );
       const sessionId = session.id;
-      console.log(`Nueva sesión creada exitosamente - ID: ${sessionId} para par ${i + 1}`);
+      console.log(`NUEVA SESIÓN INDEPENDIENTE CREADA - ID: ${sessionId} para par ${i + 1} (${invoiceFile.originalname} + ${deliveryFile.originalname})`);
       
       // **Actualizar estado (Inicio OCR Par)**
       // Marcar archivos como "processing"
