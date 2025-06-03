@@ -79,9 +79,23 @@ export function FileUploadSection() {
       // Invalidar todas las consultas relacionadas con comparaciones y procesamiento
       queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
       queryClient.invalidateQueries({ queryKey: ["/api/comparisons/latest"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/comparisons/recent"] });
       queryClient.invalidateQueries({ queryKey: ["/api/processing/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
       
-      console.log("Comparación iniciada, todas las consultas invalidadas para actualización automática", data);
+      // Limpiar todos los bloques y crear uno nuevo vacío
+      setBlocks([
+        {
+          id: "block-" + Date.now(),
+          invoiceFiles: [],
+          deliveryFiles: []
+        }
+      ]);
+      
+      // Cambiar la key de los componentes FileUpload para forzar su reseteo visual
+      setFileUploadKey(Date.now());
+      
+      console.log("Comparación iniciada, archivos limpiados y consultas invalidadas", data);
     },
     onError: (error: Error) => {
       toast({
@@ -297,6 +311,7 @@ export function FileUploadSection() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Invoice Upload */}
               <FileUpload 
+                key={`invoice-${block.id}-${fileUploadKey}`}
                 onFilesSelected={(files) => handleInvoiceFilesSelected(block.id, files)}
                 label="Facturas"
                 description="PDF, JPG o PNG (máx. 10MB)"
@@ -314,6 +329,7 @@ export function FileUploadSection() {
               
               {/* Delivery Order Upload */}
               <FileUpload 
+                key={`delivery-${block.id}-${fileUploadKey}`}
                 onFilesSelected={(files) => handleDeliveryFilesSelected(block.id, files)}
                 label="Órdenes de Entrega"
                 description="PDF, JPG o PNG (máx. 10MB)"
