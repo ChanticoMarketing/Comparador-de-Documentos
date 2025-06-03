@@ -11,6 +11,7 @@ import {
 import { useQuery, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useErrorRecovery } from "@/hooks/useErrorRecovery";
 import { ComparisonResult, ResultItem, MetadataItem, ResultTab } from "@/types";
 
 interface ResultsSectionProps {
@@ -30,6 +31,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const { toast } = useToast();
+  const errorRecovery = useErrorRecovery();
 
   // Query para una comparación específica
   const singleComparisonQuery = useQuery<ComparisonResult, Error, ComparisonResult>({
@@ -103,7 +105,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     
     console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", debugInfo);
     
-    // Log errors in detail
+    // Log errors in detail and trigger recovery
     if (error) {
       console.error("=== RESULTS SECTION ERROR ===");
       console.error("Error:", error);
@@ -111,6 +113,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       console.error("Error stack:", error.stack);
       console.error("Query state:", debugInfo.queryStatus);
       console.error("=============================");
+      
+      // Trigger automatic error recovery
+      errorRecovery.handleError(error);
     }
   }, [data, allComparisons, currentBlockIndex, isLoading, error, singleComparisonQuery, multipleComparisonsQuery, comparisonId]);
 
@@ -247,15 +252,26 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      errorRecovery.resetRecovery();
                       if (comparisonId) {
                         singleComparisonQuery.refetch();
                       } else {
                         multipleComparisonsQuery.refetch();
                       }
                     }}
+                    disabled={errorRecovery.isRecovering}
                     className="bg-red-800 hover:bg-red-700 border-red-700 text-white"
                   >
-                    Reintentar
+                    {errorRecovery.isRecovering ? 'Recuperando...' : 'Reintentar'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={errorRecovery.initiateRecovery}
+                    disabled={errorRecovery.isRecovering || errorRecovery.recoveryAttempts >= 3}
+                    className="bg-blue-700 hover:bg-blue-600 border-blue-600 text-white"
+                  >
+                    Recuperación automática
                   </Button>
                   <Button
                     variant="outline"
