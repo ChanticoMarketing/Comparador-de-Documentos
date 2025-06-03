@@ -90,25 +90,44 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  if (process.env.NODE_ENV === "development" || app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     // In production, serve static files from the correct build directory
-    const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+    const distPath = path.resolve(process.cwd(), "dist", "public");
+    console.log(`Attempting to serve static files from: ${distPath}`);
     
     if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
+      console.log(`Static files directory found, serving from: ${distPath}`);
       
-      // Serve index.html for all non-API routes (SPA fallback)
+      // Serve static files
+      app.use(express.static(distPath, {
+        maxAge: '1d',
+        etag: false
+      }));
+      
+      // Serve index.html for all non-API and non-health routes (SPA fallback)
       app.get("*", (req, res) => {
-        // Don't serve index.html for API routes
-        if (req.path.startsWith("/api")) {
-          return res.status(404).json({ error: "API endpoint not found" });
+        // Don't serve index.html for API routes or health check
+        if (req.path.startsWith("/api") || req.path === "/health") {
+          return res.status(404).json({ error: "Endpoint not found" });
         }
-        res.sendFile(path.resolve(distPath, "index.html"));
+        
+        const indexPath = path.resolve(distPath, "index.html");
+        console.log(`Serving index.html from: ${indexPath} for route: ${req.path}`);
+        res.sendFile(indexPath);
       });
     } else {
       console.error(`Build directory not found: ${distPath}`);
+      console.log("Available directories in dist:");
+      try {
+        const distDir = path.resolve(process.cwd(), "dist");
+        if (fs.existsSync(distDir)) {
+          console.log(fs.readdirSync(distDir));
+        }
+      } catch (e) {
+        console.log("Could not read dist directory");
+      }
       serveStatic(app); // Fallback to original method
     }
   }

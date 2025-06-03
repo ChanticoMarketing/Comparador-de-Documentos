@@ -2135,23 +2135,23 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    status: "OK",
-    message: "OCR Intelligence API is running",
-    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    environment: process.env.NODE_ENV || "development"
-  });
-});
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: (/* @__PURE__ */ new Date()).toISOString()
-  });
-});
 (async () => {
   const server = await registerRoutes(app);
+  app.get("/api/health", (req, res) => {
+    res.status(200).json({
+      status: "OK",
+      message: "OCR Intelligence API is running",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      environment: process.env.NODE_ENV || "development"
+    });
+  });
+  app.get("/health", (req, res) => {
+    res.status(200).json({
+      status: "healthy",
+      uptime: process.uptime(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
   app.use((err, req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -2168,20 +2168,36 @@ app.get("/health", (req, res) => {
       error: process.env.NODE_ENV === "development" ? err.stack : void 0
     });
   });
-  if (app.get("env") === "development") {
+  if (process.env.NODE_ENV === "development" || app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    const distPath = path5.resolve(import.meta.dirname, "..", "dist", "public");
+    const distPath = path5.resolve(process.cwd(), "dist", "public");
+    console.log(`Attempting to serve static files from: ${distPath}`);
     if (fs4.existsSync(distPath)) {
-      app.use(express2.static(distPath));
+      console.log(`Static files directory found, serving from: ${distPath}`);
+      app.use(express2.static(distPath, {
+        maxAge: "1d",
+        etag: false
+      }));
       app.get("*", (req, res) => {
-        if (req.path.startsWith("/api")) {
-          return res.status(404).json({ error: "API endpoint not found" });
+        if (req.path.startsWith("/api") || req.path === "/health") {
+          return res.status(404).json({ error: "Endpoint not found" });
         }
-        res.sendFile(path5.resolve(distPath, "index.html"));
+        const indexPath = path5.resolve(distPath, "index.html");
+        console.log(`Serving index.html from: ${indexPath} for route: ${req.path}`);
+        res.sendFile(indexPath);
       });
     } else {
       console.error(`Build directory not found: ${distPath}`);
+      console.log("Available directories in dist:");
+      try {
+        const distDir = path5.resolve(process.cwd(), "dist");
+        if (fs4.existsSync(distDir)) {
+          console.log(fs4.readdirSync(distDir));
+        }
+      } catch (e) {
+        console.log("Could not read dist directory");
+      }
       serveStatic(app);
     }
   }
