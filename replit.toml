@@ -1,0 +1,13 @@
+[build]
+run = "npm start"
+build = "npm run build"
+
+[development]
+run = "npm run dev"
+
+[env]
+NODE_ENV = "production"
+
+[deployment]
+build = "npm run build"
+run = "npm start"
