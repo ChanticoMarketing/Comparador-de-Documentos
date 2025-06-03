@@ -19,14 +19,7 @@ export interface ProcessingStatus {
   ocrProgress: number;
   aiProgress: number;
   currentOcrFile?: string;
-  currentAiStage?: string; // Etapa actual del procesamiento de IA (para mostrar en la UI)
   files?: ProcessingFile[];
-  isProcessing: boolean;  // Indica si hay un procesamiento activo en curso
-  error?: string;         // Error opcional si algo salió mal
-  blockId?: string;       // Identificador único del bloque de comparación (si aplica)
-  blockName?: string;     // Nombre descriptivo del bloque basado en el archivo de factura
-  activeBlocksCount?: number; // Número de bloques activos en procesamiento
-  blockIds?: string[];    // Lista de IDs de bloques activos
 }
 
 // Item in the comparison result
@@ -56,15 +49,9 @@ export interface ResultSummary {
 // Complete comparison result
 export interface ComparisonResult {
   id: string;
-  userId?: number;
-  sessionId: number;
   invoiceFilename: string;
   deliveryOrderFilename: string;
   createdAt: string;
-  matchCount: number;
-  warningCount: number;
-  errorCount: number;
-  isPermanent?: boolean;
   summary: ResultSummary;
   items: ResultItem[];
   metadata: MetadataItem[];
@@ -80,8 +67,6 @@ export interface Session {
   matchCount: number;
   warningCount: number;
   errorCount: number;
-  userId?: number;
-  username?: string; // Nombre de usuario que realizó la comparación
 }
 
 // Available tabs in the results view

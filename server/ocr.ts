@@ -51,16 +51,7 @@ export class OcrService {
     // Create temp directory if it doesn't exist
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
-      
-      // En Replit, aseguramos que el directorio tenga permisos adecuados
-      try {
-        fs.chmodSync(this.tempDir, 0o777);
-      } catch (error) {
-        console.warn("No se pudieron establecer permisos en directorio temporal OCR:", error);
-      }
     }
-    
-    console.log("Directorio temporal OCR:", this.tempDir);
   }
 
   /**
@@ -73,33 +64,10 @@ export class OcrService {
     error?: string;
   }> {
     try {
-      console.log("Procesando archivo:", filePath);
-      
-      // Verificar que el archivo existe
-      if (!fs.existsSync(filePath)) {
-        console.error(`El archivo ${filePath} no existe`);
-        return {
-          text: "",
-          error: `El archivo no existe o no es accesible: ${filePath}`,
-        };
-      }
-
       const form = new FormData();
-      
-      try {
-        const fileBuffer = fs.readFileSync(filePath);
-        form.append("image", fileBuffer, path.basename(filePath));
-      } catch (readError: unknown) {
-        const errorMessage = readError instanceof Error ? readError.message : String(readError);
-        console.error("Error al leer el archivo:", errorMessage);
-        return {
-          text: "",
-          error: `Error al leer el archivo: ${errorMessage}`,
-        };
-      }
+      const fileStream = fs.createReadStream(filePath);
+      form.append("image", fileStream);
 
-      console.log("Enviando archivo a API4AI OCR...");
-      
       // Make API call to API4AI OCR service
       const response = await axios({
         method: "post",
@@ -108,7 +76,7 @@ export class OcrService {
         headers: {
           "x-rapidapi-key": this.apiKey,
           "x-rapidapi-host": "ocr43.p.rapidapi.com",
-          "Content-Type": "multipart/form-data"
+          "Content-Type": "application/x-www-form-urlencoded"
         },
       });
 
@@ -116,6 +84,7 @@ export class OcrService {
 
       if (!response.status) {
         console.error("API4AI OCR error:", result);
+        console.log('ERROR ERROR ERROR ERROR')
         return {
           text: "",
           error: `API4AI Error: ${(result as API4AIErrorResponse)?.message || "Unknown error"}`,
@@ -150,10 +119,9 @@ export class OcrService {
       // Mock implementation that just returns the original file
       // In a real implementation, this would extract individual pages
       return [filePath];
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("PDF split error:", errorMessage);
-      throw new Error(`Failed to split PDF: ${errorMessage}`);
+    } catch (error: { message: any; }) {
+      console.error("PDF split error:", error);
+      throw new Error(`Failed to split PDF: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -178,16 +146,9 @@ export class OcrService {
   async cleanupFiles(filePaths: string[]): Promise<void> {
     for (const filePath of filePaths) {
       try {
-        // Verificar que el archivo existe antes de intentar eliminarlo
-        if (fs.existsSync(filePath)) {
-          await fs.promises.unlink(filePath);
-          console.log(`Archivo temporal eliminado: ${filePath}`);
-        } else {
-          console.warn(`El archivo ${filePath} no existe, no se puede eliminar`);
-        }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`Error al eliminar archivo ${filePath}: ${errorMessage}`);
+        await fs.promises.unlink(filePath);
+      } catch (error) {
+        console.error(`Failed to delete file ${filePath}:`, error);
       }
     }
   }
@@ -195,42 +156,20 @@ export class OcrService {
 
 function newExtractRawText(result: any): string {
   let fullText = '';
-  
-  // Para API4AI OCR, el texto se encuentra en la estructura: results.text_blocks[].text
-  if (result.results?.text_blocks) {
-    console.log("Procesando texto extraído usando formato text_blocks standard");
-    result.results.text_blocks.forEach((block: any) => {
-      if (block.text) {
-        fullText += normalizeProductString(block.text) + '\n';
-      }
-    });
-  }
-  // Formato alternativo: results[].entities[].objects[].entities[].text
-  else if (Array.isArray(result.results)) {
-    console.log("Procesando texto extraído usando formato alternativo");
-    (result.results as any[])?.forEach((page: any) => {
-      (page.entities as any[])?.forEach((entity: any) => {
-        (entity.objects as any[])?.forEach((obj: any) => {
-          (obj.entities as any[])?.forEach((innerEntity: any) => {
-            if (innerEntity.text) {
-              fullText += normalizeProductString(innerEntity.text) + '\n';
-            }
-          });
+
+  (result.results as any[])?.forEach((page: any) => {
+    (page.entities as any[])?.forEach((entity: any) => {
+      (entity.objects as any[])?.forEach((obj: any) => {
+        (obj.entities as any[])?.forEach((innerEntity: any) => {
+          if (innerEntity.text) {
+            fullText +=  normalizeProductString(innerEntity.text) + '\n';
+          }
         });
       });
     });
-  }
+  });
 
-  const trimmedText = fullText.trim();
-  
-  // Agregar log para verificar si se extrajo texto
-  if (!trimmedText) {
-    console.warn("No se pudo extraer texto del documento. Respuesta:", JSON.stringify(result).substring(0, 500) + "...");
-  } else {
-    console.log(`Texto extraído exitosamente (${trimmedText.length} caracteres)`);
-  }
-  
-  return trimmedText;
+  return fullText.trim(); //delete ln
 }
 
 // Export a factory function to get an OCR service instance

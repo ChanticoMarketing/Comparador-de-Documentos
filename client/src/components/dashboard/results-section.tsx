@@ -1,90 +1,26 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Accordion, 
-  AccordionContent, 
-  AccordionItem, 
-  AccordionTrigger 
-} from "@/components/ui/accordion";
-import { useQuery, useMutation, UseQueryOptions } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ComparisonResult, ResultItem, MetadataItem, ResultTab } from "@/types";
+import { ComparisonResult, ResultItem, ResultTab } from "@/types";
 
 interface ResultsSectionProps {
   comparisonId?: string;
 }
 
-type ComparisonWithSession = ComparisonResult & {
-  sessionInfo?: {
-    id: number;
-    name: string;
-    createdAt: string;
-    status: string;
-  };
-};
-
 export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>("products");
-  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const { toast } = useToast();
 
-  // Query para una comparación específica
-  const singleComparisonQuery = useQuery<ComparisonResult, Error, ComparisonResult>({
-    queryKey: [`/api/comparisons/${comparisonId}`],
-    enabled: !!comparisonId,
-    refetchOnWindowFocus: true,
-    staleTime: 2000,
+  const { data, isLoading, error } = useQuery<ComparisonResult>({
+    queryKey: comparisonId 
+      ? [`/api/comparisons/${comparisonId}`]
+      : ["/api/comparisons/latest"],
+    enabled: true, // Only fetch if we have a comparison to show
   });
-
-  // Query para múltiples comparaciones recientes
-  const multipleComparisonsQuery = useQuery<ComparisonWithSession[], Error, ComparisonWithSession[]>({
-    queryKey: ["/api/comparisons/recent"],
-    enabled: !comparisonId,
-    refetchOnWindowFocus: true,
-    staleTime: 2000,
-    refetchInterval: 5000,
-  });
-
-  // Determinar qué datos usar
-  const allComparisons = comparisonId ? (singleComparisonQuery.data ? [singleComparisonQuery.data] : []) : multipleComparisonsQuery.data || [];
-  const data = comparisonId ? singleComparisonQuery.data : allComparisons[currentBlockIndex];
-  const isLoading = comparisonId ? singleComparisonQuery.isLoading : multipleComparisonsQuery.isLoading;
-  const error = comparisonId ? singleComparisonQuery.error : multipleComparisonsQuery.error;
-  
-  // Funciones de navegación entre bloques
-  const goToNextBlock = () => {
-    if (currentBlockIndex < allComparisons.length - 1) {
-      setCurrentBlockIndex(currentBlockIndex + 1);
-    }
-  };
-  
-  const goToPrevBlock = () => {
-    if (currentBlockIndex > 0) {
-      setCurrentBlockIndex(currentBlockIndex - 1);
-    }
-  };
-  
-  const goToBlock = (index: number) => {
-    if (index >= 0 && index < allComparisons.length) {
-      setCurrentBlockIndex(index);
-    }
-  };
-  
-  // Efecto para detectar y registrar actualizaciones de datos
-  useEffect(() => {
-    console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", {
-      comparisonId,
-      isLoading,
-      error: error?.message,
-      allComparisons: allComparisons.length,
-      currentData: data?.id,
-      currentBlockIndex,
-      time: new Date().toISOString()
-    });
-  }, [data, allComparisons, currentBlockIndex, isLoading, error]);
 
   const saveResultsMutation = useMutation({
     mutationFn: async () => {
@@ -101,22 +37,22 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Error ${response.status}: ${errorText}`);
+        throw new Error(errorText || "Error al guardar los resultados");
       }
       
-      return response.json();
+      return await response.json();
     },
     onSuccess: () => {
       toast({
         title: "Resultados guardados",
-        description: "Los resultados de la comparación se han guardado correctamente.",
+        description: "Los resultados de la comparación han sido guardados exitosamente",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/comparisons"] });
     },
-    onError: (error) => {
-      console.error("Error saving results:", error);
+    onError: (error: Error) => {
       toast({
-        title: "Error al guardar",
-        description: "No se pudieron guardar los resultados. Inténtalo de nuevo.",
+        title: "Error al guardar los resultados",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -124,29 +60,32 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
 
   const exportMutation = useMutation({
     mutationFn: async (format: "pdf" | "excel") => {
-      if (!data) throw new Error("No hay datos para exportar");
+      if (!data) return null;
       
       const response = await fetch(`/api/comparisons/${data.id}/export?format=${format}`, {
-        method: 'GET',
-        credentials: 'include',
+        method: "GET",
+        credentials: "include",
       });
       
       if (!response.ok) {
-        throw new Error(`Error al exportar ${format}: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(errorText || `Error al exportar a ${format.toUpperCase()}`);
       }
       
+      // Handle file download
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `comparacion-${data.id}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `comparison-${data.id}.${format === "pdf" ? "pdf" : "xlsx"}`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      return true;
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error al exportar",
         description: error.message,
@@ -168,38 +107,17 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   };
 
   // If there's no result data, don't show this section
-  if (isLoading) {
-    return (
-      <Card className="mt-6 bg-gray-800 border-gray-700">
-        <CardHeader className="border-b border-gray-700">
-          <CardTitle className="text-lg font-medium text-white">
-            Cargando resultados...
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            Obteniendo detalles de la comparación
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 flex justify-center">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
-        </CardContent>
-      </Card>
-    );
-  }
-  
-  // No mostrar la sección si hay error o no hay datos disponibles
-  if (error || !data) {
+  if (isLoading || error || !data) {
     return null;
   }
 
   // Function to get status class for highlighting differences
   const getHighlightClass = (status: string) => {
     switch (status) {
-      case "match":
-        return "text-green-300";
       case "warning":
-        return "text-yellow-300";
+        return "bg-yellow-900 bg-opacity-30";
       case "error":
-        return "text-red-300";
+        return "bg-red-900 bg-opacity-30";
       default:
         return "";
     }
@@ -210,190 +128,48 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     switch (status) {
       case "match":
         return (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-900 text-green-300">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-300">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
             Coincidente
           </span>
         );
       case "warning":
         return (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-300">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
             Advertencia
           </span>
         );
       case "error":
         return (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-900 text-red-300">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-300">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
             Discrepancia
           </span>
         );
       default:
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-900 text-gray-300">
-            Desconocido
-          </span>
-        );
+        return null;
     }
   };
-
-  // Parse results data
-  let items: ResultItem[] = [];
-  let metadata: MetadataItem[] = [];
-  
-  // Parse items from rawData
-  if (data.rawData) {
-    try {
-      const parsedData = typeof data.rawData === 'string' ? JSON.parse(data.rawData) : data.rawData;
-      if (parsedData.items && Array.isArray(parsedData.items)) {
-        items = parsedData.items;
-      }
-      if (parsedData.metadata && Array.isArray(parsedData.metadata)) {
-        metadata = parsedData.metadata;
-      }
-    } catch (e) {
-      console.error('Error parsing rawData items:', e);
-    }
-  }
-
-  // Calculate summary
-  const summary = {
-    matches: items.filter(item => item.status === "match").length,
-    warnings: items.filter(item => item.status === "warning").length,
-    errors: items.filter(item => item.status === "error").length,
-  };
-
-  // Group items by product name
-  const groupedItems = items.reduce((acc: Record<string, any[]>, item: any) => {
-    const productName = item.productName || "Producto sin nombre";
-    if (!acc[productName]) {
-      acc[productName] = [];
-    }
-    acc[productName].push(item);
-    return acc;
-  }, {});
 
   return (
-    <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
+    <Card className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-lg font-medium text-white">
-              Resultados de la comparación
-              {!comparisonId && allComparisons.length > 1 && (
-                <span className="ml-2 text-sm font-normal text-blue-400">
-                  Bloque {currentBlockIndex + 1} de {allComparisons.length}
-                </span>
-              )}
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
-            </CardDescription>
-          </div>
-          
-          {/* Navegación entre bloques */}
-          {!comparisonId && allComparisons.length > 1 && (
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToPrevBlock}
-                  disabled={currentBlockIndex === 0}
-                  className="h-8 w-8 p-0"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </Button>
-                
-                {/* Indicadores de página */}
-                <div className="flex space-x-1">
-                  {allComparisons.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => goToBlock(index)}
-                      className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
-                        index === currentBlockIndex
-                          ? "bg-primary-600 text-white"
-                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      }`}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToNextBlock}
-                  disabled={currentBlockIndex === allComparisons.length - 1}
-                  className="h-8 w-8 p-0"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Button>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  className="bg-blue-700 hover:bg-blue-800 border-blue-900 text-white text-xs"
-                  onClick={() => window.open(`/api/comparisons/${data.id}/export?format=pdf`, '_blank')}
-                  disabled={!data?.id}
-                  size="sm"
-                >
-                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  PDF
-                </Button>
-                <Button
-                  variant="outline"
-                  className="bg-green-700 hover:bg-green-800 border-green-900 text-white text-xs"
-                  onClick={() => window.open(`/api/comparisons/${data.id}/export?format=excel`, '_blank')}
-                  disabled={!data?.id}
-                  size="sm"
-                >
-                  <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Excel
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          {/* Botones de exportación para vista de comparación única */}
-          {comparisonId && (
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                className="bg-blue-700 hover:bg-blue-800 border-blue-900 text-white text-xs"
-                onClick={() => window.open(`/api/comparisons/${data.id}/export?format=pdf`, '_blank')}
-                disabled={!data.id}
-                size="sm"
-              >
-                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                PDF
-              </Button>
-              <Button
-                variant="outline"
-                className="bg-green-700 hover:bg-green-800 border-green-900 text-white text-xs"
-                onClick={() => window.open(`/api/comparisons/${data.id}/export?format=excel`, '_blank')}
-                disabled={!data.id}
-                size="sm"
-              >
-                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Excel
-              </Button>
-            </div>
-          )}
-        </div>
+        <CardTitle className="text-lg font-medium text-white">
+          Resultados de la comparación
+        </CardTitle>
+        <CardDescription className="text-gray-400">
+          {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
+        </CardDescription>
       </CardHeader>
       
       <CardContent className="p-6">
@@ -408,7 +184,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Coincidencias</p>
-                <p className="text-xl font-semibold text-white">{summary.matches}</p>
+                <p className="text-xl font-semibold text-white">{data.summary.matches}</p>
               </div>
             </div>
           </div>
@@ -424,7 +200,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Advertencias</p>
-                <p className="text-xl font-semibold text-white">{summary.warnings}</p>
+                <p className="text-xl font-semibold text-white">{data.summary.warnings}</p>
               </div>
             </div>
           </div>
@@ -439,7 +215,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-300">Discrepancias</p>
-                <p className="text-xl font-semibold text-white">{summary.errors}</p>
+                <p className="text-xl font-semibold text-white">{data.summary.errors}</p>
               </div>
             </div>
           </div>
@@ -483,86 +259,54 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
           </div>
           
           <TabsContent value="products" className="pt-6">
-            <Accordion type="single" collapsible className="w-full space-y-3">
-              {Object.entries(groupedItems).map(([productName, productItems], groupIndex) => {
-                // Determinar el estado global del grupo
-                const groupStatus = productItems.some(item => item.status === "error") 
-                  ? "error" 
-                  : productItems.some(item => item.status === "warning") 
-                    ? "warning" 
-                    : "match";
-                
-                return (
-                  <AccordionItem 
-                    key={groupIndex} 
-                    value={`item-${groupIndex}`}
-                    className={`border border-gray-700 rounded-md overflow-hidden ${
-                      groupStatus === "error" 
-                        ? "bg-red-900/10 border-red-900/30" 
-                        : groupStatus === "warning" 
-                          ? "bg-yellow-900/10 border-yellow-900/30" 
-                          : "bg-green-900/10 border-green-900/30"
-                    }`}
-                  >
-                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                      <div className="flex items-center justify-between w-full">
-                        <span className="font-medium text-white">{productName}</span>
-                        <div className="flex items-center space-x-3">
-                          {renderStatusBadge(groupStatus)}
-                          <span className="text-sm text-gray-400">
-                            ({productItems.length} variante{productItems.length !== 1 ? 's' : ''})
-                          </span>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="px-4 pb-4 overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-700">
-                          <thead className="bg-gray-800/60">
-                            <tr>
-                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Factura
-                              </th>
-                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Orden Entrega
-                              </th>
-                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Estado
-                              </th>
-                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Nota
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-700/50">
-                            {productItems.map((item: any, index: number) => (
-                              <tr key={index} className={`${getHighlightClass(item.status)}`}>
-                                <td className="px-4 py-3 text-sm text-gray-300">
-                                  <span className="font-medium">
-                                    {item.invoiceValue}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-300">
-                                  <span className="font-medium">
-                                    {item.deliveryOrderValue}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  {renderStatusBadge(item.status)}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-300">
-                                  {item.note || "-"}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-700">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Producto
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Factura
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Orden Entrega
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Nota
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                  {data.items.map((item, index) => (
+                    <tr key={index}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                        {item.productName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span className={getHighlightClass(item.status)}>
+                          {item.invoiceValue}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span className={getHighlightClass(item.status)}>
+                          {item.deliveryOrderValue}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {renderStatusBadge(item.status)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-300">
+                        {item.note || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </TabsContent>
           
           <TabsContent value="metadata" className="pt-6">
@@ -585,7 +329,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                  {metadata.map((meta: any, index: number) => (
+                  {data.metadata.map((meta, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                         {meta.field}

@@ -8,11 +8,9 @@ import {
   Comparison,
   comparisonItems,
   comparisonMetadata,
-  AppSettings,
-  ComparisonItem,
-  ComparisonMetadata
+  AppSettings
 } from "@shared/schema";
-import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types/index";
+import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types";
 
 /**
  * Storage service for the application
@@ -25,11 +23,9 @@ export class StorageService {
    */
   async createSession(
     invoiceFilename: string,
-    deliveryOrderFilename: string,
-    userId?: number
+    deliveryOrderFilename: string
   ): Promise<Session> {
     const [session] = await db.insert(sessions).values({
-      userId,
       invoiceFilename,
       deliveryOrderFilename,
       status: "processing",
@@ -65,7 +61,7 @@ export class StorageService {
     const result = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId)
     });
-
+    
     return result;
   }
 
@@ -85,13 +81,11 @@ export class StorageService {
    */
   async saveComparisonResult(
     sessionId: number,
-    result: ComparisonResult,
-    userId?: number
+    result: ComparisonResult
   ): Promise<Comparison> {
     // First, create the comparison record
     const [comparison] = await db.insert(comparisons).values({
       sessionId,
-      userId,
       invoiceFilename: result.invoiceFilename,
       deliveryOrderFilename: result.deliveryOrderFilename,
       matchCount: result.summary.matches,
@@ -158,26 +152,22 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
-      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
-      matchCount: comparison.matchCount,
-      warningCount: comparison.warningCount,
-      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
+      items: comparison.items.map(item => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
+      metadata: comparison.metadata.map(meta => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -205,26 +195,22 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
-      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
-      matchCount: comparison.matchCount,
-      warningCount: comparison.warningCount,
-      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
+      items: comparison.items.map(item => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
+      metadata: comparison.metadata.map(meta => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -251,26 +237,22 @@ export class StorageService {
     // Convert to our application's result structure
     return {
       id: comparison.id.toString(),
-      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
-      matchCount: comparison.matchCount,
-      warningCount: comparison.warningCount,
-      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
+      items: comparison.items.map(item => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
+      metadata: comparison.metadata.map(meta => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
@@ -278,50 +260,6 @@ export class StorageService {
       })),
       rawData: comparison.rawData,
     };
-  }
-
-  /**
-   * Get all comparisons for a session
-   */
-  async getComparisonsBySessionId(sessionId: number): Promise<ComparisonResult[]> {
-    const sessionComparisons = await db.query.comparisons.findMany({
-      where: eq(comparisons.sessionId, sessionId),
-      orderBy: desc(comparisons.createdAt),
-      with: {
-        items: true,
-        metadata: true,
-      },
-    });
-
-    return sessionComparisons.map((comparison: Comparison & { items: ComparisonItem[]; metadata: ComparisonMetadata[] }) => ({
-      id: comparison.id.toString(),
-      sessionId: comparison.sessionId,
-      invoiceFilename: comparison.invoiceFilename,
-      deliveryOrderFilename: comparison.deliveryOrderFilename,
-      createdAt: comparison.createdAt.toISOString(),
-      summary: {
-        matches: comparison.matchCount,
-        warnings: comparison.warningCount,
-        errors: comparison.errorCount,
-      },
-      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
-        productName: item.productName,
-        invoiceValue: item.invoiceValue,
-        deliveryOrderValue: item.deliveryOrderValue,
-        status: item.status as "match" | "warning" | "error",
-        note: item.note || undefined,
-      })),
-      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
-        field: meta.field,
-        invoiceValue: meta.invoiceValue,
-        deliveryOrderValue: meta.deliveryOrderValue,
-        status: meta.status as "match" | "warning" | "error",
-      })),
-      rawData: comparison.rawData,
-      matchCount: comparison.matchCount,
-      warningCount: comparison.warningCount,
-      errorCount: comparison.errorCount,
-    }));
   }
 
   /**
@@ -337,28 +275,24 @@ export class StorageService {
       },
     });
 
-    return comparisonList.map((comparison: Comparison & { items: ComparisonItem[]; metadata: ComparisonMetadata[] }): ComparisonResult => ({
+    return comparisonList.map(comparison => ({
       id: comparison.id.toString(),
-      sessionId: comparison.sessionId,
       invoiceFilename: comparison.invoiceFilename,
       deliveryOrderFilename: comparison.deliveryOrderFilename,
       createdAt: comparison.createdAt.toISOString(),
-      matchCount: comparison.matchCount,
-      warningCount: comparison.warningCount,
-      errorCount: comparison.errorCount,
       summary: {
         matches: comparison.matchCount,
         warnings: comparison.warningCount,
         errors: comparison.errorCount,
       },
-      items: comparison.items.map((item: ComparisonItem): ResultItem => ({
+      items: comparison.items.map(item => ({
         productName: item.productName,
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         note: item.note || undefined,
       })),
-      metadata: comparison.metadata.map((meta: ComparisonMetadata): MetadataItem => ({
+      metadata: comparison.metadata.map(meta => ({
         field: meta.field,
         invoiceValue: meta.invoiceValue,
         deliveryOrderValue: meta.deliveryOrderValue,
