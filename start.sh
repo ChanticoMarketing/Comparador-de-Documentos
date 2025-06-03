@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# Build the application
-echo "Building application..."
+# Script de inicio para Replit deployment
+echo "Iniciando OCR Intelligence..."
+
+# Construir la aplicación
 npm run build
 
-# Start the production server
-echo "Starting production server..."
+# Iniciar el servidor en producción
 npm start
