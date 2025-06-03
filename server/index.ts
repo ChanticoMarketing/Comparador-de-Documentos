@@ -48,15 +48,7 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  // Add health check endpoints for deployment monitoring - only for API routes
-  app.get("/api/health", (req: Request, res: Response) => {
-    res.status(200).json({ 
-      status: "OK", 
-      message: "OCR Intelligence API is running",
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development'
-    });
-  });
+  // Remove conflicting health check endpoints
 
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -83,42 +75,25 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   
-  // Determine how to serve the application based on available files and environment
+  // Always serve the web application, prioritizing built files when available
   const distPath = path.resolve(process.cwd(), "dist", "public");
   const hasBuiltFiles = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, "index.html"));
   
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Built files available: ${hasBuiltFiles}`);
-  console.log(`Dist path: ${distPath}`);
-  
   if (hasBuiltFiles) {
-    // Serve built static files when available (production or after build)
     console.log(`Serving static files from: ${distPath}`);
     
-    // Serve static files with appropriate caching
+    // Serve static files
     app.use(express.static(distPath, {
-      maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
-      etag: false
+      maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0'
     }));
     
-    // SPA fallback - serve index.html for all non-API routes
+    // SPA fallback for all routes - serve index.html instead of 404
     app.get("*", (req, res) => {
-      // Only serve JSON for API routes
-      if (req.path.startsWith("/api")) {
-        return res.status(404).json({ error: "API endpoint not found" });
-      }
-      
       const indexPath = path.resolve(distPath, "index.html");
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error(`Error serving index.html:`, err);
-          res.status(500).json({ error: "Failed to serve application" });
-        }
-      });
+      res.sendFile(indexPath);
     });
   } else {
-    // Use Vite development server when no built files available
-    console.log("No built files found, using Vite development server");
+    console.log("Using Vite development server");
     await setupVite(app, server);
   }
 

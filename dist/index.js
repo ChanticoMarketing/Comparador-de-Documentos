@@ -1454,7 +1454,7 @@ async function registerRoutes(app2) {
     });
     next();
   });
-  app2.get("/api/health", (req, res) => {
+  app2.get("/api/system/health", (req, res) => {
     const healthData = {
       status: "ok",
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1464,14 +1464,12 @@ async function registerRoutes(app2) {
       nodeVersion: process.version,
       database: {
         connected: true
-        // We'll assume connected if no error
       },
       server: {
         port: process.env.PORT || 3e3,
         pid: process.pid
       }
     };
-    console.log("Health check requested:", healthData);
     res.json(healthData);
   });
   app2.get("/api/health/db", async (req, res) => {
@@ -2089,18 +2087,6 @@ async function setupVite(app2, server) {
     }
   });
 }
-function serveStatic(app2) {
-  const distPath = path4.resolve(import.meta.dirname, "public");
-  if (!fs3.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`
-    );
-  }
-  app2.use(express.static(distPath));
-  app2.use("*", (_req, res) => {
-    res.sendFile(path4.resolve(distPath, "index.html"));
-  });
-}
 
 // server/index.ts
 import dotenv4 from "dotenv";
@@ -2137,21 +2123,6 @@ app.use((req, res, next) => {
 });
 (async () => {
   const server = await registerRoutes(app);
-  app.get("/api/health", (req, res) => {
-    res.status(200).json({
-      status: "OK",
-      message: "OCR Intelligence API is running",
-      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-      environment: process.env.NODE_ENV || "development"
-    });
-  });
-  app.get("/health", (req, res) => {
-    res.status(200).json({
-      status: "healthy",
-      uptime: process.uptime(),
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  });
   app.use((err, req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -2168,38 +2139,20 @@ app.use((req, res, next) => {
       error: process.env.NODE_ENV === "development" ? err.stack : void 0
     });
   });
-  if (process.env.NODE_ENV === "development" || app.get("env") === "development") {
-    await setupVite(app, server);
+  const distPath = path5.resolve(process.cwd(), "dist", "public");
+  const hasBuiltFiles = fs4.existsSync(distPath) && fs4.existsSync(path5.join(distPath, "index.html"));
+  if (hasBuiltFiles) {
+    console.log(`Serving static files from: ${distPath}`);
+    app.use(express2.static(distPath, {
+      maxAge: process.env.NODE_ENV === "production" ? "1d" : "0"
+    }));
+    app.get("*", (req, res) => {
+      const indexPath = path5.resolve(distPath, "index.html");
+      res.sendFile(indexPath);
+    });
   } else {
-    const distPath = path5.resolve(process.cwd(), "dist", "public");
-    console.log(`Attempting to serve static files from: ${distPath}`);
-    if (fs4.existsSync(distPath)) {
-      console.log(`Static files directory found, serving from: ${distPath}`);
-      app.use(express2.static(distPath, {
-        maxAge: "1d",
-        etag: false
-      }));
-      app.get("*", (req, res) => {
-        if (req.path.startsWith("/api") || req.path === "/health") {
-          return res.status(404).json({ error: "Endpoint not found" });
-        }
-        const indexPath = path5.resolve(distPath, "index.html");
-        console.log(`Serving index.html from: ${indexPath} for route: ${req.path}`);
-        res.sendFile(indexPath);
-      });
-    } else {
-      console.error(`Build directory not found: ${distPath}`);
-      console.log("Available directories in dist:");
-      try {
-        const distDir = path5.resolve(process.cwd(), "dist");
-        if (fs4.existsSync(distDir)) {
-          console.log(fs4.readdirSync(distDir));
-        }
-      } catch (e) {
-        console.log("Could not read dist directory");
-      }
-      serveStatic(app);
-    }
+    console.log("Using Vite development server");
+    await setupVite(app, server);
   }
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3e3;
   if (!process.env.NODE_ENV && process.env.PORT) {

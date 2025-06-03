@@ -93,8 +93,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
-  // Health check endpoint for debugging
-  app.get("/api/health", (req: Request, res: Response) => {
+  // Health check endpoint moved to /api/system/health to avoid conflicts
+  app.get("/api/system/health", (req: Request, res: Response) => {
     const healthData = {
       status: "ok",
       timestamp: new Date().toISOString(),
@@ -103,7 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       environment: process.env.NODE_ENV || 'development',
       nodeVersion: process.version,
       database: {
-        connected: true, // We'll assume connected if no error
+        connected: true,
       },
       server: {
         port: process.env.PORT || 3000,
@@ -111,7 +111,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     };
 
-    console.log("Health check requested:", healthData);
     res.json(healthData);
   });
 
