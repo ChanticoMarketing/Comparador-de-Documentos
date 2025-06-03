@@ -48,21 +48,13 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  // Add health check endpoints for deployment monitoring
+  // Add health check endpoints for deployment monitoring - only for API routes
   app.get("/api/health", (req: Request, res: Response) => {
     res.status(200).json({ 
       status: "OK", 
       message: "OCR Intelligence API is running",
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development'
-    });
-  });
-
-  app.get("/health", (req: Request, res: Response) => {
-    res.status(200).json({ 
-      status: "healthy",
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString()
     });
   });
 
@@ -90,46 +82,44 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "development" || app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    // In production, serve static files from the correct build directory
-    const distPath = path.resolve(process.cwd(), "dist", "public");
-    console.log(`Attempting to serve static files from: ${distPath}`);
+  
+  // Determine how to serve the application based on available files and environment
+  const distPath = path.resolve(process.cwd(), "dist", "public");
+  const hasBuiltFiles = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, "index.html"));
+  
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Built files available: ${hasBuiltFiles}`);
+  console.log(`Dist path: ${distPath}`);
+  
+  if (hasBuiltFiles) {
+    // Serve built static files when available (production or after build)
+    console.log(`Serving static files from: ${distPath}`);
     
-    if (fs.existsSync(distPath)) {
-      console.log(`Static files directory found, serving from: ${distPath}`);
-      
-      // Serve static files
-      app.use(express.static(distPath, {
-        maxAge: '1d',
-        etag: false
-      }));
-      
-      // Serve index.html for all non-API and non-health routes (SPA fallback)
-      app.get("*", (req, res) => {
-        // Don't serve index.html for API routes or health check
-        if (req.path.startsWith("/api") || req.path === "/health") {
-          return res.status(404).json({ error: "Endpoint not found" });
-        }
-        
-        const indexPath = path.resolve(distPath, "index.html");
-        console.log(`Serving index.html from: ${indexPath} for route: ${req.path}`);
-        res.sendFile(indexPath);
-      });
-    } else {
-      console.error(`Build directory not found: ${distPath}`);
-      console.log("Available directories in dist:");
-      try {
-        const distDir = path.resolve(process.cwd(), "dist");
-        if (fs.existsSync(distDir)) {
-          console.log(fs.readdirSync(distDir));
-        }
-      } catch (e) {
-        console.log("Could not read dist directory");
+    // Serve static files with appropriate caching
+    app.use(express.static(distPath, {
+      maxAge: process.env.NODE_ENV === 'production' ? '1d' : '0',
+      etag: false
+    }));
+    
+    // SPA fallback - serve index.html for all non-API routes
+    app.get("*", (req, res) => {
+      // Only serve JSON for API routes
+      if (req.path.startsWith("/api")) {
+        return res.status(404).json({ error: "API endpoint not found" });
       }
-      serveStatic(app); // Fallback to original method
-    }
+      
+      const indexPath = path.resolve(distPath, "index.html");
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`Error serving index.html:`, err);
+          res.status(500).json({ error: "Failed to serve application" });
+        }
+      });
+    });
+  } else {
+    // Use Vite development server when no built files available
+    console.log("No built files found, using Vite development server");
+    await setupVite(app, server);
   }
 
   // Use PORT environment variable for Autoscale deployment compatibility

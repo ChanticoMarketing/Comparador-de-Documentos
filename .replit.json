@@ -1,0 +1,7 @@
+{
+  "run": "npm run dev",
+  "entrypoint": "server/index.ts",
+  "language": "nodejs",
+  "modules": ["nodejs-20"],
+  "deploymentTarget": "autoscale"
+}
