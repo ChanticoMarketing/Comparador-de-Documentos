@@ -1,4 +1,4 @@
-run = "npm run dev"
+run = "node index.js"
 
 [deployment]
 build = "npm run build"
