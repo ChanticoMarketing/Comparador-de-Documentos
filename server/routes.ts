@@ -271,6 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.status(202).json({
           message: `Lote de ${numPairs} pares iniciado exitosamente`,
+          totalPairs: numPairs,
         });
       } catch (error) {
         console.error("Error uploading files:", error);
@@ -622,13 +623,14 @@ async function processFiles(
       console.log(`Orden de entrega: ${deliveryFile.originalname}`);
       
       // **Crear sesión independiente para este par**
+      console.log(`Creando nueva sesión para par ${i + 1}: ${invoiceFile.originalname} + ${deliveryFile.originalname}`);
       const session = await storage.createSession(
         invoiceFile.originalname,
         deliveryFile.originalname,
         userId
       );
       const sessionId = session.id;
-      console.log(`Sesión creada para el par: ${sessionId}`);
+      console.log(`Nueva sesión creada exitosamente - ID: ${sessionId} para par ${i + 1}`);
       
       // **Actualizar estado (Inicio OCR Par)**
       // Marcar archivos como "processing"
