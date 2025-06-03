@@ -48,12 +48,12 @@ const UserMenu = () => {
   if (!isAuthenticated) {
     return (
       <div className="flex items-center gap-2">
-        <Link href="/auth/login">
+        <Link href="/login">
           <Button variant="outline" size="sm">
             Iniciar Sesión
           </Button>
         </Link>
-        <Link href="/auth/register">
+        <Link href="/register">
           <Button size="sm">Registrarse</Button>
         </Link>
       </div>
