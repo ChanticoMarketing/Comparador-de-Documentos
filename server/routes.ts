@@ -3,12 +3,18 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getOcrService } from "./ocr";
 import { getMatcherService } from "./matcher";
+import { authService } from "./auth";
+import { isAuthenticated, AuthRequest, getUserId } from "./auth-config";
+import passport from "passport";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import os from "os";
 import { ProcessingStatus, Settings } from "../client/src/types";
 import { exportToPdf, exportToExcel } from "./utils";
+import { db } from "@db";
+import { comparisons } from "@shared/schema";
+import { desc } from "drizzle-orm";
 
 // Global processing state (in a real app, this would be in a database or Redis)
 interface ProcessingState {
@@ -16,6 +22,7 @@ interface ProcessingState {
   ocrProgress: number;
   aiProgress: number;
   currentOcrFile?: string;
+  currentAiStage?: string; // Etapa actual del procesamiento de IA (para mostrar en la UI)
   files: Array<{
     name: string;
     type: "invoice" | "deliveryOrder";
@@ -24,8 +31,19 @@ interface ProcessingState {
   }>;
   isProcessing: boolean;
   error?: string;
+  blockId?: string; // Identificador único del bloque de comparación
+  blockName?: string; // Nombre descriptivo del bloque basado en el archivo de factura
 }
 
+// Ahora mantenemos un registro de múltiples bloques de procesamiento
+const processingBlocks: Record<string, ProcessingState> = {};
+
+// Sesión compartida para todos los bloques de un procesamiento batch
+let sharedSessionId: number | null = null;
+let sharedSessionStartTime: number | null = null;
+const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+
+// Estado principal para compatibilidad con código existente
 const processingState: ProcessingState = {
   ocrProgress: 0,
   aiProgress: 0,
@@ -35,10 +53,19 @@ const processingState: ProcessingState = {
 
 // Configure multer for file uploads
 const createTempDir = (): string => {
+  // Usar un directorio temporal que funcione bien en Replit
   const tempDir = path.join(os.tmpdir(), "ocr-matcher-uploads");
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
+    
+    // En Replit, aseguramos que el directorio tenga permisos adecuados
+    try {
+      fs.chmodSync(tempDir, 0o777);
+    } catch (error) {
+      console.warn("No se pudieron establecer permisos en directorio temporal:", error);
+    }
   }
+  console.log("Directorio temporal para uploads:", tempDir);
   return tempDir;
 };
 
@@ -51,6 +78,51 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Rutas de autenticación
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const newUser = await authService.registerUser(req.body);
+      res.status(201).json(newUser);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/auth/login", (req: Request, res: Response, next) => {
+    passport.authenticate("local", (err: Error, user: any) => {
+      if (err) {
+        return res.status(500).json({ message: "Error en el servidor" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+      
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          return res.status(500).json({ message: "Error al iniciar sesión" });
+        }
+        return res.status(200).json(user);
+      });
+    })(req, res, next);
+  });
+  
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error al cerrar sesión" });
+      }
+      res.status(200).json({ message: "Sesión cerrada correctamente" });
+    });
+  });
+  
+  app.get("/api/auth/me", (req: Request, res: Response) => {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      res.status(200).json(req.user);
+    } else {
+      res.status(401).json({ message: "No autenticado" });
+    }
+  });
 
   // Get application settings
   app.get("/api/settings", async (req: Request, res: Response) => {
@@ -89,14 +161,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/settings", async (req: Request, res: Response) => {
     try {
       const settingsData = req.body as Settings;
-      const updatedSettings = await storage.saveSettings({
+      // Obtener configuración existente para mantener el ID si existe
+      const existingSettings = await storage.getSettings();
+      
+      const settingsToSave: any = {
         api4aiKey: settingsData.api4aiKey || "",
         openaiKey: settingsData.openaiKey || "",
         openaiModel: settingsData.openaiModel || "gpt-4o",
         fallbackToMiniModel: settingsData.fallbackToMiniModel || true,
         autoSaveResults: settingsData.autoSaveResults || false,
         maxFileSize: settingsData.maxFileSize || 10,
-      });
+      };
+      
+      // Si hay configuración existente, usar su ID
+      if (existingSettings && existingSettings.id) {
+        settingsToSave.id = existingSettings.id;
+      }
+      
+      const updatedSettings = await storage.saveSettings(settingsToSave);
       
       // Update environment variables for keys
       if (settingsData.api4aiKey) {
@@ -126,13 +208,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ]),
     async (req: Request, res: Response) => {
       try {
-        // Check if processing is already in progress
-        if (processingState.isProcessing) {
-          return res.status(409).json({
-            message: "Another processing job is already in progress",
-          });
-        }
-
         const files = req.files as {
           [fieldname: string]: Express.Multer.File[];
         };
@@ -145,16 +220,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Reset processing state
-        processingState.ocrProgress = 0;
-        processingState.aiProgress = 0;
-        processingState.files = [];
-        processingState.isProcessing = true;
-        processingState.error = undefined;
+        // Obtener el ID del bloque de comparación (si existe)
+        const blockId = req.body.blockId || `block-${Date.now()}`;
+        console.log(`Procesando bloque de comparación: ${blockId}`);
 
-        // Add files to processing state
+        // Verificar si este bloque específico ya está en procesamiento
+        if (processingBlocks[blockId] && processingBlocks[blockId].isProcessing) {
+          return res.status(409).json({
+            message: `El bloque '${blockId}' ya está siendo procesado`,
+          });
+        }
+
+        // Crear un nuevo estado de procesamiento para este bloque
+        const blockState: ProcessingState = {
+          ocrProgress: 0,
+          aiProgress: 0,
+          files: [],
+          isProcessing: true,
+          error: undefined,
+          blockId: blockId,
+          blockName: files.invoices[0]?.originalname || `Bloque ${blockId.slice(-6)}`,
+        };
+
+        // Agregar archivos al estado de procesamiento del bloque
         files.invoices.forEach((file) => {
-          processingState.files.push({
+          blockState.files.push({
             name: file.originalname,
             type: "invoice",
             size: file.size,
@@ -163,7 +253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         files.deliveryOrders.forEach((file) => {
-          processingState.files.push({
+          blockState.files.push({
             name: file.originalname,
             type: "deliveryOrder",
             size: file.size,
@@ -171,33 +261,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         });
 
-        // Create a new session
-        const session = await storage.createSession(
-          files.invoices[0].originalname,
-          files.deliveryOrders[0].originalname
-        );
-        processingState.sessionId = session.id;
+        // Registrar el bloque en la colección de bloques
+        processingBlocks[blockId] = blockState;
+
+        // Actualizar el estado principal para compatibilidad con código existente
+        Object.assign(processingState, blockState);
+
+        // Obtener el ID del usuario si está autenticado
+        const userId = getUserId(req as AuthRequest) || undefined;
+        
+        // Verificar si hay una sesión compartida válida o crear una nueva
+        const now = Date.now();
+        let sessionId: number;
+        
+        if (sharedSessionId && sharedSessionStartTime && (now - sharedSessionStartTime < SESSION_TIMEOUT)) {
+          // Reutilizar sesión compartida existente
+          sessionId = sharedSessionId;
+          console.log(`Reutilizando sesión compartida: ${sessionId}`);
+        } else {
+          // Crear nueva sesión compartida
+          const session = await storage.createSession(
+            `Procesamiento batch - ${files.invoices[0].originalname}`,
+            `Múltiples archivos - ${files.deliveryOrders[0].originalname}`,
+            userId
+          );
+          sharedSessionId = session.id;
+          sharedSessionStartTime = now;
+          sessionId = session.id;
+          console.log(`Nueva sesión compartida creada: ${sessionId}`);
+        }
+        
+        blockState.sessionId = sessionId;
+        processingState.sessionId = sessionId;
 
         // Start processing in the background
-        processFiles(files.invoices, files.deliveryOrders, session.id).catch(
+        processFiles(files.invoices, files.deliveryOrders, sessionId, blockId).catch(
           (error) => {
-            console.error("Error processing files:", error);
-            processingState.isProcessing = false;
-            processingState.error = `Error processing files: ${error.message}`;
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`Error processing files for block ${blockId}:`, errorMsg);
+            
+            if (processingBlocks[blockId]) {
+              processingBlocks[blockId].isProcessing = false;
+              processingBlocks[blockId].error = `Error processing files: ${errorMsg}`;
+            }
+            
+            // Actualizar el estado principal si corresponde al bloque actual
+            if (processingState.blockId === blockId) {
+              processingState.isProcessing = false;
+              processingState.error = `Error processing files: ${errorMsg}`;
+            }
+            processingState.error = `Error processing files: ${errorMsg}`;
             // Update session status to error
             storage.updateSessionStatus(
-              session.id,
+              sessionId,
               "error",
-              error.message
+              errorMsg
             ).catch((err) => {
-              console.error("Error updating session status:", err);
+              const errMsg = err instanceof Error ? err.message : String(err);
+              console.error("Error updating session status:", errMsg);
             });
           }
         );
 
         return res.status(202).json({
           message: "Files uploaded successfully, processing started",
-          sessionId: session.id,
+          sessionId: sessionId,
         });
       } catch (error) {
         console.error("Error uploading files:", error);
@@ -212,43 +340,183 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get processing status
   app.get("/api/processing/status", (req: Request, res: Response) => {
-    // Return the current processing state
+    // Verificar si hay un blockId en la consulta
+    const blockId = req.query.blockId as string;
+    
+    if (blockId) {
+      // Si se especifica un blockId, devolver el estado de ese bloque específico
+      const blockState = processingBlocks[blockId];
+      
+      if (!blockState || !blockState.isProcessing) {
+        return res.json({
+          ocrProgress: 0,
+          aiProgress: 0,
+          isProcessing: false,
+          files: [],
+        });
+      }
+      
+      // Devolver el estado del bloque específico
+      return res.json({
+        ocrProgress: blockState.ocrProgress,
+        aiProgress: blockState.aiProgress,
+        currentOcrFile: blockState.currentOcrFile,
+        files: blockState.files,
+        isProcessing: blockState.isProcessing,
+        error: blockState.error,
+        blockId: blockId,
+        blockName: blockState.blockName,
+      });
+    }
+    
+    // Si no se especifica un blockId, devolvemos el estado principal o global
+    
+    // Verificar si hay bloques activos (para el panel principal)
+    const activeBlocks = Object.values(processingBlocks).filter(block => block.isProcessing);
+    const activeBlockIds = Object.keys(processingBlocks).filter(id => processingBlocks[id].isProcessing);
+    
+    if (activeBlocks.length > 0) {
+      // Obtener el primer bloque activo para mostrar su estado
+      const firstActiveBlock = activeBlocks[0];
+      
+      return res.json({
+        ocrProgress: firstActiveBlock.ocrProgress || 0,
+        aiProgress: firstActiveBlock.aiProgress || 0,
+        currentOcrFile: firstActiveBlock.currentOcrFile,
+        currentAiStage: firstActiveBlock.currentAiStage,
+        files: firstActiveBlock.files || [],
+        isProcessing: true,
+        error: firstActiveBlock.error,
+        activeBlocksCount: activeBlocks.length,
+        blockIds: activeBlockIds,
+        currentBlockId: activeBlockIds[0], // ID del bloque que se está procesando actualmente
+      });
+    }
+    
+    // Limpiamos el estado cuando no hay procesamiento activo
+    if (!processingState.isProcessing) {
+      // Si no hay procesamiento activo, enviamos un estado limpio
+      const cleanStatus: ProcessingStatus = {
+        ocrProgress: 0,
+        aiProgress: 0,
+        isProcessing: false,
+        files: [], // No mostramos archivos cuando no hay procesamiento
+      };
+      return res.json(cleanStatus);
+    }
+    
+    // Return the current processing state cuando hay procesamiento activo principal
     const status: ProcessingStatus = {
       ocrProgress: processingState.ocrProgress,
       aiProgress: processingState.aiProgress,
       currentOcrFile: processingState.currentOcrFile,
       files: processingState.files,
+      isProcessing: processingState.isProcessing,
+      error: processingState.error,
     };
     return res.json(status);
   });
 
-  // Cancel processing
+  // Cancel processing - supports specific block cancellation or all blocks
   app.post("/api/processing/cancel", async (req: Request, res: Response) => {
-    if (!processingState.isProcessing) {
-      return res.status(400).json({
-        message: "No processing job is currently running",
+    // Verificar si se especifica un blockId para cancelar un bloque específico
+    const blockId = req.query.blockId as string;
+    
+    if (blockId) {
+      // Cancelar un bloque específico
+      if (!processingBlocks[blockId] || !processingBlocks[blockId].isProcessing) {
+        return res.status(400).json({
+          message: `No hay procesamiento activo para el bloque ${blockId}`,
+        });
+      }
+      
+      // Actualizar el estado de la sesión si existe
+      if (processingBlocks[blockId].sessionId) {
+        await storage.updateSessionStatus(
+          processingBlocks[blockId].sessionId,
+          "error",
+          "Procesamiento cancelado por el usuario"
+        );
+      }
+      
+      // Resetear el estado del bloque
+      processingBlocks[blockId].isProcessing = false;
+      processingBlocks[blockId].ocrProgress = 0;
+      processingBlocks[blockId].aiProgress = 0;
+      
+      console.log(`Bloque de procesamiento ${blockId} cancelado correctamente`);
+      
+      // Si este bloque también es el estado principal actual, restablecer ese también
+      if (processingState.blockId === blockId) {
+        processingState.isProcessing = false;
+        processingState.ocrProgress = 0;
+        processingState.aiProgress = 0;
+        processingState.sessionId = undefined;
+      }
+      
+      // Eliminar el bloque del registro
+      delete processingBlocks[blockId];
+      
+      return res.json({
+        message: `Procesamiento del bloque ${blockId} cancelado correctamente`,
+        success: true,
+      });
+    } else {
+      // Cancelación global de todos los procesamientos
+      if (!processingState.isProcessing && Object.values(processingBlocks).filter(b => b.isProcessing).length === 0) {
+        return res.status(400).json({
+          message: "No hay ningún procesamiento activo en este momento",
+        });
+      }
+      
+      // Cancelar todos los bloques activos
+      Object.keys(processingBlocks).forEach(id => {
+        if (processingBlocks[id].isProcessing) {
+          // Actualizar sesión si existe
+          if (processingBlocks[id].sessionId) {
+            storage.updateSessionStatus(
+              processingBlocks[id].sessionId,
+              "error",
+              "Procesamiento cancelado por el usuario"
+            ).catch(error => {
+              console.error(`Error al actualizar estado de sesión para bloque ${id}:`, error);
+            });
+          }
+          
+          // Eliminar el bloque
+          delete processingBlocks[id];
+        }
+      });
+      
+      // Limpiar sesión compartida
+      sharedSessionId = null;
+      sharedSessionStartTime = null;
+      
+      // Actualizar el estado principal si está activo
+      if (processingState.isProcessing) {
+        // Actualizar el estado de la sesión si existe
+        if (processingState.sessionId) {
+          await storage.updateSessionStatus(
+            processingState.sessionId,
+            "error",
+            "Processing canceled by user"
+          );
+        }
+        
+        // Resetear estado principal
+        processingState.isProcessing = false;
+        processingState.ocrProgress = 0;
+        processingState.aiProgress = 0;
+        processingState.sessionId = undefined;
+      }
+      
+      console.log("Todos los procesamientos cancelados correctamente");
+      
+      return res.json({
+        message: "Procesamiento cancelado correctamente",
+        success: true,
       });
     }
-
-    // Update session status if we have one
-    if (processingState.sessionId) {
-      await storage.updateSessionStatus(
-        processingState.sessionId,
-        "error",
-        "Processing canceled by user"
-      );
-    }
-
-    // Reset processing state
-    processingState.isProcessing = false;
-    processingState.ocrProgress = 0;
-    processingState.aiProgress = 0;
-    processingState.sessionId = undefined;
-    
-    return res.json({
-      message: "Processing canceled successfully",
-      success: true,
-    });
   });
 
   // Get all sessions
@@ -332,28 +600,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get a specific comparison result
-  app.get("/api/comparisons/:id", async (req: Request, res: Response) => {
+  // Get all recent comparisons (for multiple blocks)
+  app.get("/api/comparisons/recent", async (req: Request, res: Response) => {
     try {
+      // Obtener las últimas 5 comparaciones independientemente de la sesión
+      const allComparisons = await db.query.comparisons.findMany({
+        orderBy: desc(comparisons.createdAt),
+        limit: 10,
+        with: {
+          items: true,
+          metadata: true,
+        },
+      });
+      
+      console.log(`DEBUG: Total de comparaciones encontradas: ${allComparisons.length}`);
+      
+      if (allComparisons.length === 0) {
+        return res.status(404).json({
+          message: "No comparisons found",
+        });
+      }
+
+      // Convertir al formato esperado por el frontend
+      const formattedComparisons = allComparisons.map((comparison: any) => ({
+        id: comparison.id.toString(),
+        sessionId: comparison.sessionId,
+        invoiceFilename: comparison.invoiceFilename,
+        deliveryOrderFilename: comparison.deliveryOrderFilename,
+        createdAt: comparison.createdAt.toISOString(),
+        summary: {
+          matches: comparison.matchCount,
+          warnings: comparison.warningCount,
+          errors: comparison.errorCount,
+        },
+        items: comparison.items.map((item: any) => ({
+          productName: item.productName,
+          invoiceValue: item.invoiceValue,
+          deliveryOrderValue: item.deliveryOrderValue,
+          status: item.status as "match" | "warning" | "error",
+          note: item.note || undefined,
+        })),
+        metadata: comparison.metadata.map((meta: any) => ({
+          field: meta.field,
+          invoiceValue: meta.invoiceValue,
+          deliveryOrderValue: meta.deliveryOrderValue,
+          status: meta.status as "match" | "warning" | "error",
+        })),
+        rawData: comparison.rawData,
+        matchCount: comparison.matchCount,
+        warningCount: comparison.warningCount,
+        errorCount: comparison.errorCount,
+      }));
+
+      console.log(`DEBUG: Comparaciones formateadas: ${formattedComparisons.length}`);
+      return res.json(formattedComparisons);
+    } catch (error) {
+      console.error("Error fetching recent comparisons:", error);
+      return res.status(500).json({
+        message: `Error fetching recent comparisons: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  });
+
+  // Get a specific comparison result
+  app.get("/api/comparisons/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      // Convertir ID a número y verificar que sea válido
       const comparisonId = parseInt(req.params.id);
       if (isNaN(comparisonId)) {
+        console.error(`ID de comparación inválido recibido: "${req.params.id}"`);
         return res.status(400).json({
-          message: "Invalid comparison ID",
+          message: "ID de comparación inválido",
         });
       }
 
+      console.log(`Solicitando comparación ID: ${comparisonId}`);
+
+      // Manejamos el tipo de usuario de manera segura
+      const authReq = req as unknown as AuthRequest;
+      
+      // Obtener el ID del usuario actual
+      const userId = getUserId(authReq);
+      if (!userId) {
+        console.error("Solicitud sin usuario autenticado");
+        return res.status(401).json({
+          message: "Sesión no válida. Por favor inicie sesión nuevamente.",
+        });
+      }
+
+      console.log(`Usuario ${userId} solicitando comparación ${comparisonId}`);
+
+      // Obtener la comparación
       const comparison = await storage.getComparison(comparisonId);
+      
+      // Si no existe, retornar 404 con mensaje claro
       if (!comparison) {
+        console.error(`Comparación ID ${comparisonId} no encontrada en la base de datos`);
         return res.status(404).json({
-          message: "Comparison not found",
+          message: `Comparación con ID ${comparisonId} no encontrada. Por favor verifique que el ID es correcto.`,
         });
       }
 
+      // Verificar que la comparación pertenece al usuario (si tiene userId definido)
+      // Si el campo userId no está definido en la comparación (migraciones antiguas) permitir acceso
+      const comparisonUserId = comparison.userId as number | undefined;
+      
+      // Solo verificar permisos si el usuario está definido en la comparación
+      if (comparisonUserId !== undefined && comparisonUserId !== userId) {
+        console.error(`Usuario ${userId} intentó acceder a comparación ${comparisonId} que pertenece a usuario ${comparisonUserId}`);
+        return res.status(403).json({
+          message: "No tienes permiso para acceder a esta comparación",
+        });
+      }
+
+      // Comparación encontrada y permisos verificados, devolver datos
+      console.log(`Comparación ${comparisonId} enviada exitosamente al usuario ${userId}`);
       return res.json(comparison);
     } catch (error) {
-      console.error("Error fetching comparison:", error);
+      console.error(`Error procesando solicitud de comparación:`, error);
       return res.status(500).json({
-        message: `Error fetching comparison: ${
+        message: `Error al obtener la comparación: ${
           error instanceof Error ? error.message : String(error)
         }`,
       });
@@ -446,125 +814,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Process files in the background
+// Process files in the background with individual block processing
 async function processFiles(
   invoiceFiles: Express.Multer.File[],
   deliveryOrderFiles: Express.Multer.File[],
-  sessionId: number
+  sessionId: number,
+  blockId?: string
 ): Promise<void> {
   const ocrService = getOcrService();
   const matcherService = getMatcherService();
   const processedFiles: string[] = [];
+  
+  // Determinar qué estado de procesamiento usar: el del bloque específico o el global
+  const state = blockId && processingBlocks[blockId] 
+    ? processingBlocks[blockId] 
+    : processingState;
 
   try {
-    // First, process all files with OCR
-    const totalFiles = invoiceFiles.length + deliveryOrderFiles.length;
-    let processedFileCount = 0;
-
-    // Process invoice files
-    let invoiceText = "";
-    for (const file of invoiceFiles) {
-      // Update processing state
-      const fileIndex = processingState.files.findIndex(
-        (f) => f.name === file.originalname && f.type === "invoice"
-      );
-      if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "processing";
+    // Procesar bloques individualmente: cada par (factura, orden) es un bloque
+    const totalBlocks = Math.min(invoiceFiles.length, deliveryOrderFiles.length);
+    
+    console.log(`Procesando ${totalBlocks} bloques individuales para la sesión ${sessionId}`);
+    
+    for (let blockIndex = 0; blockIndex < totalBlocks; blockIndex++) {
+      const invoiceFile = invoiceFiles[blockIndex];
+      const deliveryFile = deliveryOrderFiles[blockIndex];
+      
+      console.log(`Procesando bloque ${blockIndex + 1}/${totalBlocks}: ${invoiceFile.originalname} vs ${deliveryFile.originalname}`);
+      
+      // Actualizar progreso por bloque
+      const blockStartPercent = Math.floor((blockIndex / totalBlocks) * 100);
+      const blockEndPercent = Math.floor(((blockIndex + 1) / totalBlocks) * 100);
+      
+      state.ocrProgress = blockStartPercent;
+      state.currentOcrFile = `Bloque ${blockIndex + 1}: ${invoiceFile.originalname}`;
+      
+      // Procesar OCR para este bloque específico
+      console.log(`OCR: Procesando factura ${invoiceFile.originalname}`);
+      const { text: invoiceText, error: invoiceError } = await ocrService.extractText(invoiceFile.path);
+      if (invoiceError) {
+        throw new Error(`OCR error en factura: ${invoiceError}`);
       }
-      processingState.currentOcrFile = file.originalname;
-
-      // Process the file
-      const { text, error } = await ocrService.extractText(
-        file.path
+      
+      console.log(`OCR: Procesando orden de entrega ${deliveryFile.originalname}`);
+      const { text: deliveryText, error: deliveryError } = await ocrService.extractText(deliveryFile.path);
+      if (deliveryError) {
+        throw new Error(`OCR error en orden de entrega: ${deliveryError}`);
+      }
+      
+      processedFiles.push(invoiceFile.path, deliveryFile.path);
+      
+      // Actualizar progreso OCR
+      state.ocrProgress = Math.floor(blockStartPercent + (blockEndPercent - blockStartPercent) * 0.7);
+      
+      // Iniciar análisis IA para este bloque
+      state.aiProgress = blockStartPercent;
+      state.currentAiStage = `Comparando bloque ${blockIndex + 1}/${totalBlocks}`;
+      
+      console.log(`IA: Comparando documentos del bloque ${blockIndex + 1}`);
+      
+      // Realizar comparación SOLO para este bloque individual
+      const comparisonResult = await matcherService.compareDocuments(
+        invoiceText,
+        deliveryText,
+        invoiceFile.originalname,
+        deliveryFile.originalname
       );
       
-      if (error) {
-        throw new Error(`OCR error: ${error}`);
-      }
-
-      // Update processed text
-      invoiceText += text + "\n\n";
-
-      // Update processing state
-      processedFileCount++;
-      processingState.ocrProgress = Math.floor(
-        (processedFileCount / totalFiles) * 100
-      );
-      if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "completed";
-      }
-      processedFiles.push(file.path);
-    }
-
-    // Process delivery order files
-    let deliveryOrderText = "";
-    for (const file of deliveryOrderFiles) {
-      // Update processing state
-      const fileIndex = processingState.files.findIndex(
-        (f) => f.name === file.originalname && f.type === "deliveryOrder"
-      );
-      if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "processing";
-      }
-      processingState.currentOcrFile = file.originalname;
-
-      // Process the file
-      const { text, error } = await ocrService.extractText(
-        file.path
-      );
+      // Obtener la sesión para recuperar el userId
+      const session = await storage.getSession(sessionId);
       
-      if (error) {
-        throw new Error(`OCR error: ${error}`);
-      }
-
-      // Update processed text
-      deliveryOrderText += text + "\n\n";
-
-      // Update processing state
-      processedFileCount++;
-      processingState.ocrProgress = Math.floor(
-        (processedFileCount / totalFiles) * 100
-      );
-      if (fileIndex !== -1) {
-        processingState.files[fileIndex].status = "completed";
-      }
-      processedFiles.push(file.path);
+      // Guardar el resultado de este bloque específico como una comparación separada
+      await storage.saveComparisonResult(sessionId, comparisonResult, session?.userId || undefined);
+      
+      console.log(`Bloque ${blockIndex + 1} completado y guardado como comparación individual`);
+      
+      // Actualizar progreso final del bloque
+      state.ocrProgress = blockEndPercent;
+      state.aiProgress = blockEndPercent;
     }
 
-    // Start AI analysis
-    processingState.aiProgress = 10;
-
-    // Perform comparison
-    const comparisonResult = await matcherService.compareDocuments(
-      invoiceText,
-      deliveryOrderText,
-      invoiceFiles[0].originalname,
-      deliveryOrderFiles[0].originalname
-    );
-
-    // Update AI progress
-    processingState.aiProgress = 90;
-
-    // Save comparison result
-    await storage.saveComparisonResult(sessionId, comparisonResult);
-
-    // Update AI progress to complete
-    processingState.aiProgress = 100;
-
-    // Update session status
+    // Finalizar procesamiento
     await storage.updateSessionStatus(sessionId, "completed");
-
-    // Clean up processed files
+    
+    // Limpiar archivos procesados
     await ocrService.cleanupFiles(processedFiles);
 
-    // Reset processing state
-    processingState.isProcessing = false;
+    // Resetear estado de procesamiento
+    state.isProcessing = false;
+    state.ocrProgress = 100;
+    state.aiProgress = 100;
+    state.currentOcrFile = undefined;
+    state.currentAiStage = "Procesamiento completado";
+    
+    console.log(`Procesamiento completado: ${totalBlocks} bloques procesados como comparaciones individuales para sesión ${sessionId}`);
+    
+    // Limpiar estado del bloque si corresponde
+    if (blockId && processingBlocks[blockId]) {
+      delete processingBlocks[blockId];
+    }
+
   } catch (error) {
-    console.error("Error processing files:", error);
+    console.error(`Error processing files for session ${sessionId}:`, error);
     
     // Update processing state to indicate error
-    processingState.isProcessing = false;
-    processingState.error = error instanceof Error ? error.message : String(error);
+    state.isProcessing = false;
+    state.error = error instanceof Error ? error.message : String(error);
     
     // Update session status
     await storage.updateSessionStatus(
@@ -575,9 +930,15 @@ async function processFiles(
     
     // Clean up processed files
     if (processedFiles.length > 0) {
-      ocrService.cleanupFiles(processedFiles).catch((cleanupError) => {
+      ocrService.cleanupFiles(processedFiles).catch((cleanupError: any) => {
         console.error("Error cleaning up files:", cleanupError);
       });
+    }
+    
+    // Si este es un bloque específico con error, podemos eliminarlo de la colección
+    if (blockId && processingBlocks[blockId]) {
+      console.log(`Bloque de comparación ${blockId} falló. Eliminando de la memoria.`);
+      delete processingBlocks[blockId];
     }
     
     throw error;

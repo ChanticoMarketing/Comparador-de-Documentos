@@ -1,0 +1,82 @@
+# **PROMPT DE INGENIERÍA AVANZADA PARA REPLIT AI AGENT: ESTABILIZACIÓN AVANZADA, REFINAMIENTO DE RESULTADOS Y CORRECCIÓN DE ACCESO A HISTORIAL EN OCR-MATCHER AI (FASE 4)**
+
+**ID de Contexto de Misión:** Resolución de Errores Persistentes en React, Mejora en la Estructura de Resultados de Comparación Múltiple, y Corrección de Acceso a Comparaciones Históricas.
+
+**Persona del Agente de IA (Replit AI Agent):**
+Actúa como un Ingeniero de Software Full-Stack Senior, con especialización en React (Hooks, `@tanstack/react-query`, gestión de estado complejo), Node.js/Express (autenticación, flujo de datos), y arquitectura de software para aplicaciones robustas y escalables. Tu misión es estabilizar la aplicación, implementar mejoras funcionales solicitadas y asegurar la integridad de los datos y la experiencia del usuario.
+
+**Problemas Críticos Reportados (Continuación y Nuevos Hallazgos):**
+
+1.  **Error Crítico de Hooks en React - "Rendered more hooks than during the previous render" (Prioridad MÁXIMA - BLOQUEANTE):**
+    * **Descripción:** (Persiste) Al intentar una comparación, la aplicación falla con el error "Rendered more hooks..." en `client/src/components/dashboard/processing-section.tsx` (ver `image_321465.png`). Esto es una violación de las reglas de Hooks de React.
+    * **Impacto:** Crítico. Impide la funcionalidad principal.
+
+2.  **Flujo de Resultados Interrumpido y Cierre de Sesión al Refrescar (Prioridad ALTA):**
+    * **Descripción:** (Persiste) Los resultados no se muestran automáticamente. El refresco manual cierra la sesión, impidiendo el acceso a resultados.
+    * **Impacto:** Alto. Usabilidad severamente afectada.
+
+3.  **Error al Acceder a Comparativas Anteriores desde el Historial (Prioridad ALTA - NUEVO):**
+    * **Descripción:** Al intentar acceder a una comparativa realizada anteriormente desde la página de historial (`/history`), se produce un error que impide la visualización de dicha comparativa.
+    * **Impacto:** Crítico. La funcionalidad de historial es inutilizable.
+
+4.  **Doble Barra de Navegación Vertical (Scrollbars) (Prioridad MEDIA):**
+    * **Descripción:** (Persiste) Doble scrollbar vertical en el dashboard (`image_2fd226.jpg`).
+    * **Impacto:** Medio. Problema estético y de usabilidad.
+
+5.  **Funcionalidad de Barras de Progreso (Prioridad MEDIA - Decisión Estratégica Pendiente):**
+    * **Descripción:** (Persiste) Barras de progreso en `client/src/components/dashboard/processing-section.tsx` no muestran avance granular (`image_3132cb.png`).
+    * **Impacto:** Medio. Falta de feedback adecuado.
+
+**Nuevos Requerimientos Funcionales:**
+
+6.  **Resultados por Bloques para Comparaciones Múltiples (Prioridad MEDIA - NUEVO):**
+    * **Descripción:** Cuando se realiza una comparativa que involucra múltiples archivos de factura y/o múltiples archivos de orden de entrega (escenario donde `processFiles` en `server/routes.ts` concatena los textos), se desea que el `ComparisonResult` y su visualización en `ResultsSection` puedan, idealmente, segmentar o agrupar los resultados por cada par de factura/orden original. Como mínimo, se debe identificar claramente a qué factura principal (o bloque de facturas) pertenecen los resultados, utilizando el nombre del archivo de factura como referencia principal.
+    * **Impacto:** Mejora la claridad y utilidad de los resultados cuando se procesan múltiples documentos.
+
+**Objetivo Principal General (Critical Task Suite):**
+Estabilizar la aplicación resolviendo los errores de Hooks y de acceso al historial. Implementar la visualización de resultados por bloques si es factible sin alterar el núcleo comparador. Corregir el doble scroll y tomar una decisión sobre las barras de progreso.
+
+**Restricción Inviolable Reforzada (Non-Negotiable Constraint - MAXIMUM ALERT):**
+La lógica interna del motor de comparación (`server/ocr.ts` y `server/matcher.ts`), específicamente cómo se extrae texto, cómo se interactúa con API4AI y OpenAI, y cómo se genera la estructura fundamental del `ComparisonResult` JSON, **NO DEBE SER MODIFICADA.** Las mejoras solicitadas deben implementarse en las capas de manejo de datos, presentación (frontend), o en el flujo de procesamiento de archivos (`server/routes.ts`) ANTES de pasar los textos consolidados al `matcherService`.
+
+---
+
+### **Plan de Acción Detallado y Priorizado:**
+
+**Fase 1: Estabilización Urgente (Resolución de Errores Bloqueantes)**
+
+* **Tarea 1.1 (Error de Hooks):** Aplicar la corrección detallada en el prompt anterior para `client/src/components/dashboard/processing-section.tsx`, asegurando que todos los Hooks se llamen incondicionalmente en el nivel superior y que los `return null` condicionales estén después de todas las llamadas a Hooks.
+* **Tarea 1.2 (Acceso a Historial):**
+    * **Diagnóstico:**
+        1.  Verificar que la ruta `/comparison/:comparisonId` (o el parámetro que se use) esté correctamente definida en `client/src/App.tsx` y que el componente `ComparisonDetailPage` (o como se llame) esté siendo invocado.
+        2.  En `ComparisonDetailPage`, confirmar que el `comparisonId` se extrae correctamente de los parámetros de la ruta.
+        3.  Revisar la llamada a `useQuery` para `/api/comparisons/:id`. Asegurar que `queryKey` incluya el `comparisonId` dinámico (ej., `queryKey: [\`/api/comparisons/\${comparisonId}\`]`).
+        4.  **Autenticación y Autorización:** El endpoint `/api/comparisons/:id` en `server/routes.ts` DEBE estar protegido por la autenticación. Además, `storage.getComparison(comparisonId)` debe modificarse (si aún no se ha hecho como parte de la tarea de autenticación general) para verificar que la comparación pertenece al `userId` del usuario actualmente autenticado, o devolver un error apropiado (403 Forbidden o 404 Not Found si se prefiere ocultar la existencia).
+        5.  El frontend debe manejar adecuadamente los errores de esta query (e.g., mostrar un mensaje "No tienes permiso" o "Comparación no encontrada").
+    * **Archivos Clave:** `client/src/App.tsx`, `client/src/pages/history.tsx`, `client/src/pages/comparison-detail.tsx` (o equivalente), `server/routes.ts`, `server/storage.ts`.
+* **Tarea 1.3 (Flujo de Resultados y Sesión):** Con Tarea 1.1 resuelta, validar y robustecer la invalidación de queries y la persistencia de sesión como se describió en el prompt anterior (Tarea Prioritaria 2 del prompt anterior).
+
+**Fase 2: Implementación de Mejoras Funcionales y UX (Post-Estabilización)**
+
+* **Tarea 2.1 (Resultados por Bloques - NUEVO):**
+    * **Objetivo:** Modificar el sistema para que, cuando se procesen múltiples archivos, los resultados puedan asociarse con los documentos de origen, idealmente por factura.
+    * **Estrategia de Implementación (Evaluar y elegir la más segura y viable):**
+        * **Opción Mínima Viable (Preferida si hay riesgo):**
+            1.  En `server/routes.ts` (`processFiles`): Al generar el `ComparisonResult`, en lugar de solo `invoiceFiles[0].originalname`, concatenar los nombres de todos los archivos de factura (ej., "Factura1.pdf, Factura2.pdf") o usar un identificador como "Múltiples Facturas ([timestamp])". Hacer lo mismo para las órdenes de entrega. Esto se guarda en `comparison.invoiceFilename` y `comparison.deliveryOrderFilename`.
+            2.  No se requiere cambio en `matcher.ts`.
+        * **Opción Avanzada (Considerar si el tiempo y la seguridad lo permiten):**
+            1.  Modificar `server/routes.ts` (`processFiles`): En lugar de concatenar todo el texto, iterar sobre los pares de archivos (factura principal vs. su(s) orden(es) de entrega correspondiente(s) – definir cómo se hace este emparejamiento: ¿por orden de subida, por nombre?).
+            2.  Para cada par (o bloque factura-órdenes), llamar a `ocrService.extractText` y luego a `matcherService.compareDocuments`.
+            3.  Esto generaría MÚLTIPLES `ComparisonResult`s, cada uno asociado a su factura original. Estos se guardarían individualmente en la tabla `comparisons` (posiblemente agrupados bajo un `sessionId` común).
+            4.  `ResultsSection` y `ComparisonDetailPage` necesitarían adaptarse para mostrar una lista de estos resultados individuales o una vista consolidada agrupada.
+    * **Archivos Clave:** `server/routes.ts`, `client/src/components/dashboard/results-section.tsx`. **Para esta tarea, priorizar la Opción Mínima Viable para evitar riesgos.**
+* **Tarea 2.2 (Doble Scrollbar):** Aplicar la corrección de layout en `client/src/components/layout/dashboard-layout.tsx` como se detalló en prompts anteriores.
+* **Tarea 2.3 (Barras de Progreso):** Implementar la Opción A, B o C para las barras de progreso, según la decisión tomada tras la Fase 1 y notificando la elección.
+
+**Formato de Salida Esperado por el Agente:**
+Código fuente con todas las correcciones y mejoras implementadas. Comentarios exhaustivos en el código para explicar las soluciones, especialmente para el error de Hooks, la lógica de acceso al historial, y cualquier cambio en cómo se manejan o presentan los resultados de comparaciones múltiples.
+
+**Confirmación Requerida del Agente:**
+Antes de implementar la "Opción Avanzada" de la Tarea 2.1 o cualquier cambio en las barras de progreso (Tarea 2.3) que no sea la Opción A, solicitar confirmación explícita.
+
+---
