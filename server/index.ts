@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { configureAuth } from "./auth-config";
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -44,7 +46,7 @@ app.use((req, res, next) => {
 });
 
 // Add health check endpoints for deployment monitoring
-app.get("/", (req: Request, res: Response) => {
+app.get("/api/health", (req: Request, res: Response) => {
   res.status(200).json({ 
     status: "OK", 
     message: "OCR Intelligence API is running",
@@ -91,7 +93,24 @@ app.get("/health", (req: Request, res: Response) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // In production, serve static files from the correct build directory
+    const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+    
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      
+      // Serve index.html for all non-API routes (SPA fallback)
+      app.get("*", (req, res) => {
+        // Don't serve index.html for API routes
+        if (req.path.startsWith("/api")) {
+          return res.status(404).json({ error: "API endpoint not found" });
+        }
+        res.sendFile(path.resolve(distPath, "index.html"));
+      });
+    } else {
+      console.error(`Build directory not found: ${distPath}`);
+      serveStatic(app); // Fallback to original method
+    }
   }
 
   // Use PORT environment variable for Autoscale deployment compatibility
