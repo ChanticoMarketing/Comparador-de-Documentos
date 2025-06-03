@@ -43,6 +43,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Add health check endpoints for deployment monitoring
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: "OK", 
+    message: "OCR Intelligence API is running",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get("/health", (req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: "healthy",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 (async () => {
   const server = await registerRoutes(app);
 
@@ -76,8 +94,13 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Usar la variable de entorno PORT o el puerto 3000 como valor predeterminado
+  // Use PORT environment variable for Autoscale deployment compatibility
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  
+  // Set NODE_ENV to production if not already set in production
+  if (!process.env.NODE_ENV && process.env.PORT) {
+    process.env.NODE_ENV = 'production';
+  }
   
   // Add process monitoring for debugging server issues
   process.on('uncaughtException', (error) => {
