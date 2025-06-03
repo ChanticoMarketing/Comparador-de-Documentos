@@ -45,26 +45,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Add health check endpoints for deployment monitoring
-app.get("/api/health", (req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: "OK", 
-    message: "OCR Intelligence API is running",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-app.get("/health", (req: Request, res: Response) => {
-  res.status(200).json({ 
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
-});
-
 (async () => {
   const server = await registerRoutes(app);
+
+  // Add health check endpoints for deployment monitoring
+  app.get("/api/health", (req: Request, res: Response) => {
+    res.status(200).json({ 
+      status: "OK", 
+      message: "OCR Intelligence API is running",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  });
+
+  app.get("/health", (req: Request, res: Response) => {
+    res.status(200).json({ 
+      status: "healthy",
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    });
+  });
 
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

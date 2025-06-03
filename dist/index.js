@@ -2104,6 +2104,8 @@ function serveStatic(app2) {
 
 // server/index.ts
 import dotenv4 from "dotenv";
+import path5 from "path";
+import fs4 from "fs";
 dotenv4.config();
 var app = express2();
 app.use(express2.json());
@@ -2111,7 +2113,7 @@ app.use(express2.urlencoded({ extended: false }));
 configureAuth(app);
 app.use((req, res, next) => {
   const start = Date.now();
-  const path5 = req.path;
+  const path6 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -2120,8 +2122,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path5.startsWith("/api")) {
-      let logLine = `${req.method} ${path5} ${res.statusCode} in ${duration}ms`;
+    if (path6.startsWith("/api")) {
+      let logLine = `${req.method} ${path6} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -2169,7 +2171,19 @@ app.get("/health", (req, res) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    const distPath = path5.resolve(import.meta.dirname, "..", "dist", "public");
+    if (fs4.existsSync(distPath)) {
+      app.use(express2.static(distPath));
+      app.get("*", (req, res) => {
+        if (req.path.startsWith("/api")) {
+          return res.status(404).json({ error: "API endpoint not found" });
+        }
+        res.sendFile(path5.resolve(distPath, "index.html"));
+      });
+    } else {
+      console.error(`Build directory not found: ${distPath}`);
+      serveStatic(app);
+    }
   }
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3e3;
   if (!process.env.NODE_ENV && process.env.PORT) {
