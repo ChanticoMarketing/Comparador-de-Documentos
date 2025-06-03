@@ -57,7 +57,7 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-slate-50 dark:bg-slate-900 p-4">
+    <div className="flex justify-center items-center min-h-screen dark:bg-slate-900 p-4 bg-[rgb(2, 8, 23)]">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">Crear Cuenta</CardTitle>
