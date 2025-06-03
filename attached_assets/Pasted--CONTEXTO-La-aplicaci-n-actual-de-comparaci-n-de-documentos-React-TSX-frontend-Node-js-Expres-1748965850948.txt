@@ -1,0 +1,62 @@
+### CONTEXTO:
+La aplicación actual de comparación de documentos (React/TSX frontend, Node.js/Express/TS backend) toma todos los archivos de facturas y todos los archivos de órdenes de entrega subidos en una sola operación y los combina en una única sesión de comparación y un único resultado. Se requiere modificar este comportamiento para que cada par de (factura, orden de entrega) se procese como un "bloque" independiente, generando una sesión y un resultado de comparación distintos para cada par. La lógica central de comparación en `server/matcher.ts` no debe alterarse.
+
+### TAREA:
+Refactorizar la lógica de procesamiento de archivos en `server/routes.ts`.
+
+### ARCHIVOS A MODIFICAR PRINCIPALMENTE:
+- `server/routes.ts`
+
+### REQUISITOS DETALLADOS PARA `server/routes.ts`:
+
+1.  **Modificar la ruta `POST /api/upload` y la función de procesamiento de archivos (actualmente `processFiles`):**
+    * Cuando se reciben múltiples archivos de facturas (`invoiceFiles`) y múltiples archivos de órdenes de entrega (`deliveryOrderFiles`):
+        * Determinar el número de pares a procesar. Por ejemplo, `const numPairs = Math.min(invoiceFiles.length, deliveryOrderFiles.length);`. Si las longitudes no son iguales, se podría considerar notificar al frontend o solo procesar los pares completos.
+        * La variable global `processingState` debe inicializarse para el lote:
+            * `processingState.isProcessing = true;`
+            * `processingState.ocrProgress = 0;`
+            * `processingState.aiProgress = 0;`
+            * `processingState.files` debe poblarse con una entrada para cada archivo individual en el lote (N facturas + N órdenes), marcados inicialmente con `status: "pending"`.
+            * `processingState.error = undefined;`
+            * `processingState.sessionId = undefined;` (ya no es un ID de sesión maestra para el estado global, ya que cada par tendrá su propio ID de sesión).
+    * **Iterar `numPairs` veces. En cada iteración `i` (para el par `invoiceFiles[i]` y `deliveryOrderFiles[i]`):**
+        * **Manejo de Cancelación**: Antes de procesar cada par, verificar si `processingState.isProcessing` sigue siendo `true`. Si es `false`, detener el procesamiento del lote, limpiar los archivos temporales restantes de `multer` y salir del bucle.
+        * **Crear Sesión**: Llamar a `await storage.createSession(invoiceFiles[i].originalname, deliveryOrderFiles[i].originalname)` para crear una nueva sesión para este par. Guardar el `sessionId` devuelto para este par.
+        * **Actualizar Estado (Inicio OCR Par)**:
+            * Marcar `invoiceFiles[i]` y `deliveryOrderFiles[i]` como `"processing"` en `processingState.files`.
+            * Establecer `processingState.currentOcrFile` al nombre del archivo de factura actual.
+        * **OCR Factura**: Realizar OCR para `invoiceFiles[i]`. Recolectar `text` y `structuredData`. Manejar errores de OCR para este archivo; si ocurre un error, registrarlo para la sesión del par, marcar el archivo como `"error"` en `processingState.files`, y posiblemente saltar al siguiente par o detener el lote.
+            * Actualizar `processingState.ocrProgress` (ej: `(archivosOCRCompletados / totalArchivosEnLote) * 100`).
+            * Marcar `invoiceFiles[i]` como `"completed"` en `processingState.files`.
+        * **OCR Órden de Entrega**: Similar al paso anterior, pero para `deliveryOrderFiles[i]`.
+            * Actualizar `processingState.ocrProgress`.
+            * Marcar `deliveryOrderFiles[i]` como `"completed"` en `processingState.files`.
+            * Limpiar `processingState.currentOcrFile`.
+        * **Actualizar Estado (Inicio AI Par)**:
+            * Actualizar `processingState.aiProgress` para indicar el inicio del análisis AI para este par (ej: `(paresAiIniciados / numPairs) * 10`).
+        * **Comparación AI**: Llamar a `await matcherService.compareDocuments()` con el texto y datos estructurados *específicos del par actual*, y los nombres de archivo originales del par actual.
+        * **Actualizar Estado (Fin AI Par)**:
+            * Actualizar `processingState.aiProgress` para reflejar la finalización de la IA para este par (ej: `(paresAiCompletados / numPairs) * 100`).
+        * **Guardar Resultado**: Llamar a `await storage.saveComparisonResult(sessionIdDelPar, comparisonResult)` para guardar el resultado de la comparación asociado a la sesión del par.
+        * **Limpieza de Archivos del Par**: Limpiar los archivos temporales de `multer` para `invoiceFiles[i]` y `deliveryOrderFiles[i]` usando `ocrService.cleanupFiles()`.
+        * **Manejo de Errores del Par**: Si ocurre un error durante el OCR o la comparación AI para un par, actualizar el estado de la sesión de ese par a `"error"` en la base de datos (`storage.updateSessionStatus()`), registrar el error en `processingState.error` (quizás como un array de errores si se continúa con otros pares), y marcar los archivos correspondientes como `"error"` en `processingState.files`.
+    * **Finalización del Lote**:
+        * Una vez que todos los pares se han procesado (o el proceso se detuvo/canceló):
+            * Establecer `processingState.isProcessing = false;`.
+            * Si no hubo errores fatales que detuvieran todo el lote, establecer `processingState.ocrProgress = 100;` y `processingState.aiProgress = 100;`.
+        * Asegurarse de que todos los archivos temporales de `multer` que no fueron limpiados individualmente (por ejemplo, si el lote se canceló antes de procesarlos todos) sean eliminados.
+    * **Respuesta de la API `/api/upload`**: Debe modificarse. Ya no devolverá un solo `sessionId`. Podría devolver un mensaje de "Lote de X pares iniciado" o una lista de los IDs de sesión creados para cada par. Por simplicidad inicial, un mensaje de éxito general es aceptable.
+
+2.  **Ajustar `POST /api/processing/cancel` en `server/routes.ts`:**
+    * Al cancelar, además de actualizar la sesión (si `processingState.sessionId` se refiere al par actual), principalmente debe asegurarse de que `processingState.isProcessing` se establezca en `false` para detener el bucle de procesamiento de pares. La limpieza de archivos temporales restantes de `multer` también debe ocurrir aquí.
+
+3.  **Verificar `server/storage.ts`:**
+    * La función `createSession` y `saveComparisonResult` deberían funcionar bien si se llaman una vez por cada par, ya que cada par esencialmente se convierte en una sesión independiente.
+
+### CONSIDERACIONES ADICIONALES:
+* La UI en `client/src/components/dashboard/processing-section.tsx` consumirá `/api/processing/status`. El `ocrProgress` y `aiProgress` ahora representarán el progreso general del lote. El array `files` en `ProcessingStatus` deberá ser llenado correctamente al inicio del procesamiento del lote para mostrar el estado individual de cada archivo.
+* Asegurar la robustez en el manejo de errores por par y la limpieza de archivos.
+
+### NO MODIFICAR:
+* La lógica interna de `server/matcher.ts` (especialmente `compareDocuments` y `buildComparisonPrompt`).
+* La estructura fundamental de `ComparisonResult` o cómo `MatcherService` la genera.
