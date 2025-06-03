@@ -1,31 +1,21 @@
-console.log("Iniciando aplicación OCR Intelligence...");
-console.log("La aplicación estará disponible en la pestaña 'Webview'");
+#!/usr/bin/env node
 
-// Usar una variable de entorno específica para Replit
-process.env.PORT = process.env.PORT || 4000;
+// Simple entry point que Replit puede ejecutar
+const { execSync } = require('child_process');
 
-// Ejecutar el script de inicio usando ESM
-import { spawn } from 'child_process';
+console.log('=== OCR Intelligence Startup ===');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
 
 try {
-  console.log("Ejecutando servidor con npx tsx...");
-  
-  // Ejecutar de forma asincrónica pero capturando errores
-  const serverProcess = spawn('npx', ['tsx', 'server/index.ts'], { 
-    stdio: 'inherit',
-    env: { ...process.env, PORT: process.env.PORT }
-  });
-  
-  serverProcess.on('error', (err) => {
-    console.error("Error al iniciar la aplicación:", err);
-  });
-  
-  serverProcess.on('exit', (code) => {
-    if (code !== 0) {
-      console.error(`El proceso terminó con código de error: ${code}`);
-    }
-  });
-  
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Production mode: Building and starting...');
+    execSync('npm run build', { stdio: 'inherit' });
+    execSync('npm start', { stdio: 'inherit' });
+  } else {
+    console.log('Development mode: Starting dev server...');
+    execSync('npm run dev', { stdio: 'inherit' });
+  }
 } catch (error) {
-  console.error("Error al iniciar la aplicación:", error);
+  console.error('Error starting application:', error);
+  process.exit(1);
 }
