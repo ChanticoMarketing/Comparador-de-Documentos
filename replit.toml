@@ -1,8 +1,8 @@
-run = "npm start"
+run = "node index.js"
 
 [deployment]
 build = "npm run build"
-run = "npm start"
+run = "node index.js"
 
 [env]
 NODE_ENV = "production"

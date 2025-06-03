@@ -1,19 +1,41 @@
 #!/usr/bin/env node
 
-// Simple and direct entry point for Replit
-import { execSync } from 'child_process';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-const isProduction = process.env.NODE_ENV === 'production';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-console.log('Starting OCR Intelligence...');
-console.log('Environment:', isProduction ? 'production' : 'development');
+console.log('OCR Intelligence - Starting...');
+console.log('Environment:', process.env.NODE_ENV || 'development');
 
-if (isProduction) {
-  console.log('Building application...');
-  execSync('npm run build', { stdio: 'inherit' });
-  console.log('Starting production server...');
-  execSync('npm start', { stdio: 'inherit' });
-} else {
-  console.log('Starting development server...');
-  execSync('npm run dev', { stdio: 'inherit' });
-}
+// Ejecutar el servidor con tsx
+const serverProcess = spawn('npx', ['tsx', 'server/index.ts'], {
+  stdio: 'inherit',
+  shell: true,
+  cwd: process.cwd()
+});
+
+serverProcess.on('error', (error) => {
+  console.error('Error starting server:', error);
+  process.exit(1);
+});
+
+serverProcess.on('exit', (code) => {
+  if (code !== 0) {
+    console.error('Server exited with code:', code);
+    process.exit(code);
+  }
+});
+
+// Manejo de señales de terminación
+process.on('SIGTERM', () => {
+  console.log('Shutting down gracefully...');
+  serverProcess.kill('SIGTERM');
+});
+
+process.on('SIGINT', () => {
+  console.log('Shutting down gracefully...');
+  serverProcess.kill('SIGINT');
+});
