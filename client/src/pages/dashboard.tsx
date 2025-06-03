@@ -4,6 +4,7 @@ import { FileUploadSection } from "@/components/dashboard/file-upload-section";
 import { ProcessingSection } from "@/components/dashboard/processing-section";
 import { ResultsSection } from "@/components/dashboard/results-section";
 import { RecentSessionsSection } from "@/components/dashboard/recent-sessions-section";
+import { DebugPanel } from "@/components/debug/DebugPanel";
 import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
@@ -43,6 +44,9 @@ export default function Dashboard() {
       <ProcessingSection />
       <ResultsSection />
       <RecentSessionsSection />
+      
+      {/* Debug panel for development debugging */}
+      {process.env.NODE_ENV === 'development' && <DebugPanel />}
     </DashboardLayout>
   );
 }

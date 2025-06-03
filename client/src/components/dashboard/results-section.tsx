@@ -214,8 +214,77 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     );
   }
   
-  // No mostrar la sección si hay error o no hay datos disponibles
-  if (error || !data) {
+  // Show error state with retry option instead of hiding the section
+  if (error && !data) {
+    return (
+      <Card className="mt-6 bg-gray-800 border-gray-700">
+        <CardHeader className="border-b border-gray-700">
+          <CardTitle className="text-lg font-medium text-red-400">
+            Error de conexión
+          </CardTitle>
+          <CardDescription className="text-gray-400">
+            No se pudieron cargar los resultados de la comparación
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="bg-red-900/20 border border-red-900/30 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <svg className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-200 mb-2">
+                  Problema de conexión detectado
+                </h3>
+                <p className="text-sm text-red-300 mb-3">
+                  {error.message.includes('502') 
+                    ? 'El servidor está temporalmente no disponible. Esto puede deberse a un reinicio del sistema o problemas de conectividad.'
+                    : `Error: ${error.message}`
+                  }
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (comparisonId) {
+                        singleComparisonQuery.refetch();
+                      } else {
+                        multipleComparisonsQuery.refetch();
+                      }
+                    }}
+                    className="bg-red-800 hover:bg-red-700 border-red-700 text-white"
+                  >
+                    Reintentar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                    className="bg-gray-700 hover:bg-gray-600 border-gray-600 text-white"
+                  >
+                    Recargar página
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 text-xs text-gray-500">
+            <p>Consejos para resolver el problema:</p>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li>Verifica tu conexión a internet</li>
+              <li>El servidor puede estar reiniciándose, intenta en unos momentos</li>
+              <li>Si el problema persiste, contacta al administrador</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Don't show section if no data but no error (just loading finished)
+  if (!data) {
     return null;
   }
 

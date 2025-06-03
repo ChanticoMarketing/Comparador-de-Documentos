@@ -79,10 +79,38 @@ app.use((req, res, next) => {
   // Usar la variable de entorno PORT o el puerto 3000 como valor predeterminado
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   
+  // Add process monitoring for debugging server issues
+  process.on('uncaughtException', (error) => {
+    console.error('=== UNCAUGHT EXCEPTION ===');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    console.error('===========================');
+    // Don't exit to keep server running
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('=== UNHANDLED REJECTION ===');
+    console.error('Promise:', promise);
+    console.error('Reason:', reason);
+    console.error('============================');
+  });
+
   server.listen(port, "0.0.0.0", () => {
     log(`Servidor OCR Intelligence iniciado en puerto ${port}`);
     log("Aplicación OCR Intelligence lista para usar");
     log(`Acceda a la aplicación a través de la pestaña WebView o en http://localhost:${port}`);
+    log(`Process ID: ${process.pid}`);
+    log(`Node.js version: ${process.version}`);
+    log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
+
+  // Monitor server health periodically
+  setInterval(() => {
+    const memUsage = process.memoryUsage();
+    console.log(`=== SERVER HEALTH ===`);
+    console.log(`Uptime: ${Math.floor(process.uptime())} seconds`);
+    console.log(`Memory: RSS ${Math.round(memUsage.rss / 1024 / 1024)}MB, Heap ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
+    console.log(`====================`);
+  }, 60000); // Every minute
 
 })();
