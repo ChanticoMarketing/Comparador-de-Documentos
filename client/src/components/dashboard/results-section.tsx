@@ -73,18 +73,46 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     }
   };
   
-  // Efecto para detectar y registrar actualizaciones de datos
+  // Enhanced debugging and error tracking
   useEffect(() => {
-    console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", {
+    const debugInfo = {
       comparisonId,
       isLoading,
       error: error?.message,
       allComparisons: allComparisons.length,
       currentData: data?.id,
       currentBlockIndex,
-      time: new Date().toISOString()
-    });
-  }, [data, allComparisons, currentBlockIndex, isLoading, error]);
+      time: new Date().toISOString(),
+      // Additional debugging info
+      queryStatus: {
+        single: comparisonId ? {
+          isLoading: singleComparisonQuery.isLoading,
+          isError: singleComparisonQuery.isError,
+          error: singleComparisonQuery.error?.message,
+          dataExists: !!singleComparisonQuery.data,
+        } : null,
+        multiple: !comparisonId ? {
+          isLoading: multipleComparisonsQuery.isLoading,
+          isError: multipleComparisonsQuery.isError,
+          error: multipleComparisonsQuery.error?.message,
+          dataCount: multipleComparisonsQuery.data?.length || 0,
+        } : null
+      },
+      networkStatus: navigator.onLine ? 'online' : 'offline'
+    };
+    
+    console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", debugInfo);
+    
+    // Log errors in detail
+    if (error) {
+      console.error("=== RESULTS SECTION ERROR ===");
+      console.error("Error:", error);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      console.error("Query state:", debugInfo.queryStatus);
+      console.error("=============================");
+    }
+  }, [data, allComparisons, currentBlockIndex, isLoading, error, singleComparisonQuery, multipleComparisonsQuery, comparisonId]);
 
   const saveResultsMutation = useMutation({
     mutationFn: async () => {

@@ -46,12 +46,25 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Enhanced error logging for debugging
+    console.error("=== ERROR HANDLER TRIGGERED ===");
+    console.error("URL:", req.method, req.url);
+    console.error("Status:", status);
+    console.error("Message:", message);
+    console.error("Error Stack:", err.stack);
+    console.error("Request Headers:", req.headers);
+    console.error("Request Body:", req.body);
+    console.error("================================");
+
+    // Don't throw the error again to prevent server crashes
+    res.status(status).json({ 
+      message,
+      error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   });
 
   // importantly only setup vite in development and after

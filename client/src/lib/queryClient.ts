@@ -2,7 +2,21 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
+    let text = res.statusText;
+    try {
+      text = (await res.text()) || res.statusText;
+    } catch (e) {
+      console.error("Error reading response text:", e);
+    }
+    
+    // Enhanced error logging for debugging
+    console.error("=== API REQUEST FAILED ===");
+    console.error("Status:", res.status);
+    console.error("URL:", res.url);
+    console.error("Status Text:", res.statusText);
+    console.error("Response Text:", text);
+    console.error("===========================");
+    
     throw new Error(`${res.status}: ${text}`);
   }
 }
@@ -47,11 +61,18 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 30000, // 30 seconds instead of Infinity for better debugging
+      retry: (failureCount, error) => {
+        console.log(`Query retry ${failureCount}, error:`, error);
+        return failureCount < 2; // Retry up to 2 times
+      },
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
     mutations: {
-      retry: false,
+      retry: (failureCount, error) => {
+        console.log(`Mutation retry ${failureCount}, error:`, error);
+        return failureCount < 1; // Retry once
+      },
     },
   },
 });
