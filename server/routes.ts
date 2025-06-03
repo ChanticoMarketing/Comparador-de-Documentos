@@ -71,69 +71,12 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Add request logging middleware for debugging
+  // Minimal request logging (removed verbose debugging)
   app.use((req, res, next) => {
-    const startTime = Date.now();
-    console.log(`=== INCOMING REQUEST ===`);
-    console.log(`${req.method} ${req.path}`);
-    console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
-    console.log(`Query:`, req.query);
-    console.log(`Body:`, req.body);
-    console.log(`User Agent:`, req.get('User-Agent'));
-    console.log(`IP:`, req.ip);
-    console.log(`========================`);
-
-    res.on('finish', () => {
-      const duration = Date.now() - startTime;
-      console.log(`=== RESPONSE COMPLETED ===`);
-      console.log(`${req.method} ${req.path} -> ${res.statusCode} (${duration}ms)`);
-      console.log(`==========================`);
-    });
-
     next();
   });
 
-  // Health check endpoint moved to /api/system/health to avoid conflicts
-  app.get("/api/system/health", (req: Request, res: Response) => {
-    const healthData = {
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      environment: process.env.NODE_ENV || 'development',
-      nodeVersion: process.version,
-      database: {
-        connected: true,
-      },
-      server: {
-        port: process.env.PORT || 3000,
-        pid: process.pid,
-      }
-    };
-
-    res.json(healthData);
-  });
-
-  // Database connection test endpoint
-  app.get("/api/health/db", async (req: Request, res: Response) => {
-    try {
-      // Simple database query to test connection
-      const result = await db.query.users.findFirst();
-      res.json({ 
-        status: "ok", 
-        database: "connected",
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error("Database health check failed:", error);
-      res.status(500).json({ 
-        status: "error", 
-        database: "disconnected",
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
+  // Removed health check endpoint to prevent conflicts with web serving
 
   // Rutas de autenticación
   app.post("/api/auth/register", async (req: Request, res: Response) => {

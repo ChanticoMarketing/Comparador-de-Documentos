@@ -1437,58 +1437,7 @@ var upload = multer({
 async function registerRoutes(app2) {
   const httpServer = createServer(app2);
   app2.use((req, res, next) => {
-    const startTime = Date.now();
-    console.log(`=== INCOMING REQUEST ===`);
-    console.log(`${req.method} ${req.path}`);
-    console.log(`Headers:`, JSON.stringify(req.headers, null, 2));
-    console.log(`Query:`, req.query);
-    console.log(`Body:`, req.body);
-    console.log(`User Agent:`, req.get("User-Agent"));
-    console.log(`IP:`, req.ip);
-    console.log(`========================`);
-    res.on("finish", () => {
-      const duration = Date.now() - startTime;
-      console.log(`=== RESPONSE COMPLETED ===`);
-      console.log(`${req.method} ${req.path} -> ${res.statusCode} (${duration}ms)`);
-      console.log(`==========================`);
-    });
     next();
-  });
-  app2.get("/api/system/health", (req, res) => {
-    const healthData = {
-      status: "ok",
-      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      environment: process.env.NODE_ENV || "development",
-      nodeVersion: process.version,
-      database: {
-        connected: true
-      },
-      server: {
-        port: process.env.PORT || 3e3,
-        pid: process.pid
-      }
-    };
-    res.json(healthData);
-  });
-  app2.get("/api/health/db", async (req, res) => {
-    try {
-      const result = await db.query.users.findFirst();
-      res.json({
-        status: "ok",
-        database: "connected",
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    } catch (error) {
-      console.error("Database health check failed:", error);
-      res.status(500).json({
-        status: "error",
-        database: "disconnected",
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: (/* @__PURE__ */ new Date()).toISOString()
-      });
-    }
   });
   app2.post("/api/auth/register", async (req, res) => {
     try {
