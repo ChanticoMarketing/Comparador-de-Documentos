@@ -117,9 +117,14 @@ export class StorageService {
           invoiceValue: meta.invoiceValue,
           deliveryOrderValue: meta.deliveryOrderValue,
           status: meta.status,
+          priceMatch: meta.priceMatch
         }))
       );
     }
+
+    // Extract priceMatch from metadata (actual value, not field name)
+    const priceMatchMeta = result.metadata.find(meta => meta.priceMatch !== undefined);
+    const priceMatch = priceMatchMeta?.priceMatch || "N/A";
 
     // Update the session with the result summary
     await db.update(sessions)
@@ -128,6 +133,7 @@ export class StorageService {
         matchCount: result.summary.matches,
         warningCount: result.summary.warnings,
         errorCount: result.summary.errors,
+        priceMatch: priceMatch,
         completedAt: new Date(),
       })
       .where(eq(sessions.id, sessionId));

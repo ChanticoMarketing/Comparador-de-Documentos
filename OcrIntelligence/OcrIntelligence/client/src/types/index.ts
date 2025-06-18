@@ -37,6 +37,7 @@ export interface MetadataItem {
   invoiceValue: string;
   deliveryOrderValue: string;
   status: "match" | "warning" | "error";
+  priceMatch: string;
 }
 
 // Summary of the comparison
@@ -67,6 +68,7 @@ export interface Session {
   matchCount: number;
   warningCount: number;
   errorCount: number;
+  priceMatch: string;
 }
 
 // Available tabs in the results view
