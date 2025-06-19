@@ -1,0 +1,36 @@
+ Mi aplicación "OcrIntelligence" tiene un bug en la funcionalidad de comparación por bloques. Actualmente, cuando un usuario añade múltiples bloques de comparación, la aplicación solo procesa y compara el último bloque agregado, ignorando todos los anteriores. Tu tarea es depurar y corregir este comportamiento para asegurar que todos los bloques se procesen en una sola acción.
+
+**Directivas Estratégicas:**
+
+1.  **Navega al Frontend:** El error se encuentra en el cliente. Abre el archivo: `client/src/pages/dashboard.tsx`.
+
+2.  **Analiza la Gestión de Estado:**
+    * Dentro de `dashboard.tsx`, localiza la declaración de estado para los bloques de comparación, probablemente llamada `comparisonBlocks`.
+    * Encuentra la función que se pasa a cada bloque para actualizar sus datos (por ejemplo, `handleFileChange`, `handleTextChange`, o una función genérica como `handleBlockUpdate`). Esta función es la causa del problema.
+
+3.  **Implementa la Corrección (Lógica de Actualización Inmutable):**
+    * Reemplaza la lógica de actualización defectuosa. La nueva función debe recibir el `id` del bloque a modificar y los nuevos datos. Debe actualizar el estado `comparisonBlocks` de forma inmutable, creando un nuevo array mediante el método `.map()`.
+    * Implementa la siguiente lógica para la función de actualización:
+
+    ```typescript
+    const updateComparisonBlock = (id: string, updatedData: { file?: File | null; text?: string }) => {
+      setComparisonBlocks(prevBlocks =>
+        prevBlocks.map(block =>
+          block.id === id ? { ...block, ...updatedData } : block
+        )
+      );
+    };
+    ```
+    * Asegúrate de que esta nueva función `updateComparisonBlock` se pase como `prop` a cada componente de bloque renderizado en el `map`. Dentro del componente del bloque, deberá llamarse cada vez que el archivo o el área de texto cambien.
+
+4.  **Verifica el Envío de Datos:**
+    * Localiza la función que se ejecuta al presionar el botón principal de comparación (por ejemplo, `handleCompare`).
+    * Asegúrate de que el cuerpo (`body`) de la solicitud `fetch` o `axios` que se envía al endpoint `/api/compare` contenga el array **completo** de `comparisonBlocks`. El `JSON.stringify` debe operar sobre un objeto que contenga todos los bloques, como `{ blocks: comparisonBlocks }`.
+
+5.  **RESTRICCIÓN DE MÁXIMA PRIORIDAD (ZONA PROHIBIDA):**
+    * Bajo ninguna circunstancia debes modificar, refactorizar o alterar el contenido de los siguientes archivos del backend:
+        * `server/matcher.ts`
+        * `server/ocr.ts`
+    * Estos archivos contienen la lógica de comparación y OCR que funciona correctamente. La solución a este problema **NO REQUIERE** ningún cambio en el backend. Tu enfoque debe ser 100% en el frontend.
+
+Ejecuta estas instrucciones para restaurar la funcionalidad completa de la comparación por bloques.

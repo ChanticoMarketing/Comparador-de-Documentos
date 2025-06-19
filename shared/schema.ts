@@ -3,24 +3,43 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import { z } from "zod";
 
-// Users (base schema from template)
+// Users
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password").notNull(), // Almacenará contraseña hasheada
+  email: text("email").notNull().unique(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
+export const insertUserSchema = createInsertSchema(users, {
+  username: (schema) => schema.min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
+  password: (schema) => schema.min(6, "La contraseña debe tener al menos 6 caracteres"),
+  email: (schema) => schema.email("Debe proporcionar un email válido"),
+}).pick({
   username: true,
   password: true,
+  email: true,
+  firstName: true,
+  lastName: true,
 });
 
+export const loginUserSchema = z.object({
+  username: z.string().min(1, "El nombre de usuario es requerido"),
+  password: z.string().min(1, "La contraseña es requerida"),
+});
+
+export type LoginUser = z.infer<typeof loginUserSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 // Sessions table for tracking comparison sessions
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id), // Referencia al usuario que creó la sesión
   invoiceFilename: text("invoice_filename").notNull(),
   deliveryOrderFilename: text("delivery_order_filename").notNull(),
   status: text("status").notNull().default("processing"), // processing, completed, error
@@ -39,6 +58,7 @@ export type InsertSession = typeof sessions.$inferInsert;
 // Comparisons table for storing comparison results
 export const comparisons = pgTable("comparisons", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id), // Referencia al usuario que creó la comparación
   sessionId: integer("session_id").notNull().references(() => sessions.id),
   invoiceFilename: text("invoice_filename").notNull(),
   deliveryOrderFilename: text("delivery_order_filename").notNull(),
@@ -47,6 +67,7 @@ export const comparisons = pgTable("comparisons", {
   errorCount: integer("error_count").notNull().default(0),
   rawData: json("raw_data").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  isPermanent: boolean("is_permanent").default(true), // Indica si es un guardado permanente o temporal
 });
 
 export type Comparison = typeof comparisons.$inferSelect;
@@ -80,6 +101,13 @@ export const comparisonMetadata = pgTable("comparison_metadata", {
 export type ComparisonMetadata = typeof comparisonMetadata.$inferSelect;
 export type InsertComparisonMetadata = typeof comparisonMetadata.$inferInsert;
 
+// Tabla para sesiones de Express (connect-pg-simple)
+export const pgSessions = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { withTimezone: true }).notNull(),
+});
+
 // Application settings
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
@@ -96,11 +124,24 @@ export type AppSettings = typeof settings.$inferSelect;
 export type InsertAppSettings = typeof settings.$inferInsert;
 
 // Define relationships
-export const sessionsRelations = relations(sessions, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(sessions),
+  comparisons: many(comparisons),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
   comparisons: many(comparisons),
 }));
 
 export const comparisonsRelations = relations(comparisons, ({ one, many }) => ({
+  user: one(users, {
+    fields: [comparisons.userId],
+    references: [users.id],
+  }),
   session: one(sessions, {
     fields: [comparisons.sessionId],
     references: [sessions.id],

@@ -5,8 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Session } from "@/types";
 
 export function RecentSessionsSection() {
+  // Consulta mejorada con menor tiempo de refresco para actualización en tiempo real
   const { data: sessions, isLoading } = useQuery<Session[]>({
     queryKey: ["/api/sessions"],
+    refetchInterval: 7000, // Refrescar cada 7 segundos
+    staleTime: 3000 // Datos considerados frescos por 3 segundos
   });
 
   if (isLoading || !sessions || sessions.length === 0) {
@@ -55,6 +58,9 @@ export function RecentSessionsSection() {
                   Fecha
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  Usuario
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                   Documentos
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -67,12 +73,15 @@ export function RecentSessionsSection() {
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
               {sessions.map((session) => (
-                <tr key={session.id}>
+                <tr key={session.id} className="hover:bg-gray-750">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                     #{session.id}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     {formatDate(session.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                    {session.username || "Usuario"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                     {truncateFilename(session.invoiceFilename)}, {truncateFilename(session.deliveryOrderFilename)}
@@ -90,10 +99,24 @@ export function RecentSessionsSection() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex space-x-3">
                     <Link href={`/comparison/${session.id}`} className="text-primary-400 hover:text-primary-300">
                       Ver
                     </Link>
+                    <a 
+                      href={`/api/comparisons/${session.id}/export?format=pdf`} 
+                      target="_blank" 
+                      className="text-blue-400 hover:text-blue-300"
+                    >
+                      PDF
+                    </a>
+                    <a 
+                      href={`/api/comparisons/${session.id}/export?format=excel`} 
+                      target="_blank" 
+                      className="text-green-400 hover:text-green-300"
+                    >
+                      Excel
+                    </a>
                   </td>
                 </tr>
               ))}
