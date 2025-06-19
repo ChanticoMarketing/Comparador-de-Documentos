@@ -1,0 +1,58 @@
+# Rol: Eres un Agente de IA y Desarrollador de Software Full-Stack experto, con especialización en TypeScript, React, Node.js, Hono, Drizzle ORM y `react-query`. Tu tarea es analizar el código de una WebApp de comparación de documentos y aplicar mejoras específicas en la experiencia de usuario y la gestión de datos, sin alterar la lógica de comparación principal.
+
+## Contexto del Proyecto:
+La aplicación, "OcrIntelligence", permite a los usuarios subir documentos (facturas y órdenes de entrega), procesarlos con OCR y comparar los textos extraídos.
+- **Frontend:** React, TypeScript, Vite, `react-query` para el manejo de estado del servidor, y Shadcn para los componentes de UI.
+- **Backend:** Node.js con Hono como framework web.
+- **Base de Datos:** SQLite con Drizzle ORM.
+- **Problema Principal:** La aplicación tiene varios problemas de UX y de manejo de datos que necesitan ser corregidos.
+
+**CONSTRAINT CRÍTICO:** **NO MODIFIQUES** la lógica central de comparación de documentos que se encuentra en `server/matcher.ts`. Todos los cambios deben ser laterales a esta funcionalidad, enfocándose en el flujo de datos, la persistencia y la interfaz de usuario.
+
+## Tareas a Realizar:
+
+### Tarea 1: Implementar Actualización de Resultados en Tiempo Real (Sin Refresh Manual)
+
+**Objetivo:** Eliminar la necesidad de que el usuario actualice la página para ver los resultados de una nueva comparación.
+
+1.  **Analiza `client/src/pages/dashboard.tsx`:**
+    * Localiza la mutación `createComparison` que se usa para iniciar una nueva comparación.
+    * En el `onSuccess` callback de esta mutación, necesitas invalidar la query que obtiene el historial de comparaciones.
+2.  **Modifica el `onSuccess`:**
+    * Obtén el `queryClient` usando el hook `useQueryClient`.
+    * Llama a `queryClient.invalidateQueries({ queryKey: ['comparisons'] })`. Esto forzará a `react-query` a volver a solicitar los datos del historial, actualizando la UI con la nueva comparación.
+
+### Tarea 2: Mejorar la Visualización y Exportación de Resultados
+
+**Objetivo:** Mostrar los resultados de comparaciones en bloque de manera agrupada, añadir el nombre del usuario a cada comparación y permitir la exportación individual de resultados.
+
+1.  **Modificar el Esquema de la Base de Datos:**
+    * Ve a `shared/schema.ts`.
+    * En la tabla `comparisons`, añade una columna para registrar quién realizó la comparación. Llama a esta columna `userId` y que sea de tipo `text`. Debe estar relacionada con la tabla `users`.
+    * `userId: text('user_id').notNull().references(() => users.id),`
+
+2.  **Actualizar el Backend:**
+    * Ve a `server/routes.ts`.
+    * En la ruta `POST /api/comparisons`, asegúrate de obtener el `userId` del contexto de autenticación y guardarlo junto con los datos de la comparación en la base de datos.
+    * Modifica la estructura de datos de los resultados para que se puedan agrupar por el nombre del archivo/factura original al ser devueltos por la API.
+
+3.  **Actualizar el Frontend (`client/src/components/dashboard/results-section.tsx`):**
+    * Modifica el componente para renderizar los resultados en un formato agrupado (por ejemplo, usando el componente `Accordion` de Shadcn, donde cada `AccordionItem` representa una factura comparada).
+    * Dentro de cada grupo (de cada factura), muestra los detalles de la comparación.
+    * Añade un botón de "Exportar a PDF" a cada resultado individual.
+    * Implementa la lógica para que, al hacer clic en este botón, se genere un reporte PDF solo con la información de ese resultado específico y se descargue. Puedes usar una librería como `jspdf`.
+
+### Tarea 3: Corregir el Error 404 al Ver Comparaciones Antiguas
+
+**Objetivo:** Asegurar que los usuarios puedan ver los detalles de las comparaciones guardadas desde la página de historial sin errores.
+
+1.  **Revisar el Frontend:**
+    * En `client/src/pages/comparison-detail.tsx`, examina la llamada a la API que utiliza `react-query` para obtener los datos de una comparación por su ID (`useQuery(['comparison', id], () => api.getComparison(id))`).
+    * Asegúrate de que el `id` que se extrae de los parámetros de la URL sea correcto y se esté pasando adecuadamente a la función `api.getComparison`.
+
+2.  **Revisar el Backend:**
+    * En `server/routes.ts`, investiga la ruta `GET /api/comparisons/:id`.
+    * Verifica la lógica de la consulta a la base de datos con Drizzle. Asegúrate de que está buscando la comparación por el `id` correcto en la tabla `comparisons`.
+    * Maneja el caso en que una comparación con el `id` dado no se encuentre, devolviendo un mensaje de error claro, pero asegúrate de que la consulta es correcta para los IDs que sí existen. `eq(comparisons.id, id)`.
+
+Después de aplicar estos cambios, la aplicación debería ser más robusta, intuitiva y funcional, proporcionando una experiencia de usuario mucho más fluida. ¡Procede con la implementación, agente!
