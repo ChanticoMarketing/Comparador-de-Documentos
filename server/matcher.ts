@@ -132,7 +132,13 @@ export class MatcherService {
   You have to normalize the unit to milliliters or grams if any. 
   The input text will sometimes be a bit messy, try to always associate 1 product with 1 quantity when you detect the column, a fifo in other words.
   And if you found duplicates items by list, sum them.
-
+  
+  Additionally, extract the unit price and calculate the total price (unit price × quantity) for each item list.  
+  Then, compare the total prices of both lists (invoiceList and deliveryOrderList) and determine a general priceMatch status to include in the metadata section:
+  - If both totals match exactly, set "priceMatch": "match".
+  - If one or both totals are missing, set "priceMatch": "N/A".
+  - If totals are present but different, set "priceMatch": "error".
+  
   When you have the 2 processed list (invoiceList and deliveryOrderList), compare them and return a list of products with the following structure:
   Return a JSON with the following structure:
   {
@@ -150,7 +156,8 @@ export class MatcherService {
         "field": "Field name (e.g., 'Date', 'Invoice Number')",
         "invoiceValue": "Value in invoice",
         "deliveryOrderValue": "Value in delivery order",
-        "status": "match|warning|error"
+        "status": "match|warning|error",
+        "priceMatch": "match|N/A|error"
       }
     ],
     "summary": {
@@ -197,7 +204,7 @@ export class MatcherService {
         invoiceValue: item.invoiceValue || "",
         deliveryOrderValue: item.deliveryOrderValue || "",
         status: this.validateStatus(item.status),
-        note: item.note || "",
+        note: item.note || ""
       }))
       : [];
 
@@ -207,6 +214,7 @@ export class MatcherService {
         invoiceValue: meta.invoiceValue || "",
         deliveryOrderValue: meta.deliveryOrderValue || "",
         status: this.validateStatus(meta.status),
+        priceMatch: meta.priceMatch
       }))
       : [];
 

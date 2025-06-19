@@ -47,6 +47,7 @@ export const sessions = pgTable("sessions", {
   warningCount: integer("warning_count").notNull().default(0),
   errorCount: integer("error_count").notNull().default(0),
   errorMessage: text("error_message"),
+  priceMatch: text("price_match").notNull().default("N/A"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
@@ -94,6 +95,7 @@ export const comparisonMetadata = pgTable("comparison_metadata", {
   invoiceValue: text("invoice_value").notNull(),
   deliveryOrderValue: text("delivery_order_value").notNull(),
   status: text("status").notNull(), // match, warning, error
+  priceMatch: text("price_match").notNull().default("N/A"),
 });
 
 export type ComparisonMetadata = typeof comparisonMetadata.$inferSelect;

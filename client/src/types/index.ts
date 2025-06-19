@@ -44,6 +44,7 @@ export interface MetadataItem {
   invoiceValue: string;
   deliveryOrderValue: string;
   status: "match" | "warning" | "error";
+  priceMatch: string;
 }
 
 // Summary of the comparison
@@ -82,6 +83,7 @@ export interface Session {
   errorCount: number;
   userId?: number;
   username?: string; // Nombre de usuario que realizó la comparación
+  priceMatch: string;
 }
 
 // Available tabs in the results view
