@@ -2,11 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Accordion, 
-  AccordionContent, 
-  AccordionItem, 
-  AccordionTrigger 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger
 } from "@/components/ui/accordion";
 import { useQuery, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -55,26 +55,26 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const data = comparisonId ? singleComparisonQuery.data : allComparisons[currentBlockIndex];
   const isLoading = comparisonId ? singleComparisonQuery.isLoading : multipleComparisonsQuery.isLoading;
   const error = comparisonId ? singleComparisonQuery.error : multipleComparisonsQuery.error;
-  
+
   // Funciones de navegación entre bloques
   const goToNextBlock = () => {
     if (currentBlockIndex < allComparisons.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
     }
   };
-  
+
   const goToPrevBlock = () => {
     if (currentBlockIndex > 0) {
       setCurrentBlockIndex(currentBlockIndex - 1);
     }
   };
-  
+
   const goToBlock = (index: number) => {
     if (index >= 0 && index < allComparisons.length) {
       setCurrentBlockIndex(index);
     }
   };
-  
+
   // Enhanced debugging and error tracking
   useEffect(() => {
     const debugInfo = {
@@ -102,9 +102,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       },
       networkStatus: navigator.onLine ? 'online' : 'offline'
     };
-    
+
     console.log("DIAGNÓSTICO: ResultsSection - datos actualizados:", debugInfo);
-    
+
     // Log errors in detail and trigger recovery
     if (error) {
       console.error("=== RESULTS SECTION ERROR ===");
@@ -113,7 +113,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       console.error("Error stack:", error.stack);
       console.error("Query state:", debugInfo.queryStatus);
       console.error("=============================");
-      
+
       // Trigger automatic error recovery
       errorRecovery.handleError(error);
     }
@@ -122,7 +122,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const saveResultsMutation = useMutation({
     mutationFn: async () => {
       if (!data) return null;
-      
+
       const response = await fetch("/api/comparisons/save", {
         method: "POST",
         headers: {
@@ -131,12 +131,12 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
         body: JSON.stringify({ comparisonId: data.id }),
         credentials: "include",
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Error ${response.status}: ${errorText}`);
       }
-      
+
       return response.json();
     },
     onSuccess: () => {
@@ -158,16 +158,16 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
   const exportMutation = useMutation({
     mutationFn: async (format: "pdf" | "excel") => {
       if (!data) throw new Error("No hay datos para exportar");
-      
+
       const response = await fetch(`/api/comparisons/${data.id}/export?format=${format}`, {
         method: 'GET',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error al exportar ${format}: ${response.statusText}`);
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -218,7 +218,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
       </Card>
     );
   }
-  
+
   // Show error state with retry option instead of hiding the section
   if (error && !data) {
     return (
@@ -242,7 +242,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   Problema de conexión detectado
                 </h3>
                 <p className="text-sm text-red-300 mb-3">
-                  {error.message.includes('502') 
+                  {error.message.includes('502')
                     ? 'El servidor está temporalmente no disponible. Esto puede deberse a un reinicio del sistema o problemas de conectividad.'
                     : `Error: ${error.message}`
                   }
@@ -285,7 +285,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
             </div>
           </div>
-          
+
           <div className="mt-4 text-xs text-gray-500">
             <p>Consejos para resolver el problema:</p>
             <ul className="list-disc list-inside mt-1 space-y-1">
@@ -348,10 +348,33 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     }
   };
 
+  const renderPriceMatch = (priceMatch: string) => {
+    switch (priceMatch) {
+      case "match":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900 text-green-300">
+            Sí ✓
+          </span>
+        );
+      case "error":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-red-300">
+            No ✗
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-900 text-yellow-300">
+            N/A ⚠️
+          </span>
+        );
+    }
+  };
+
   // Parse results data
   let items: ResultItem[] = [];
   let metadata: MetadataItem[] = [];
-  
+
   // Parse items from rawData
   if (data.rawData) {
     try {
@@ -401,7 +424,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               {data.invoiceFilename ? `${data.invoiceFilename} vs ${data.deliveryOrderFilename}` : "Última comparación"}
             </CardDescription>
           </div>
-          
+
           {/* Navegación entre bloques */}
           {!comparisonId && allComparisons.length > 1 && (
             <div className="flex items-center space-x-3">
@@ -417,24 +440,23 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </Button>
-                
+
                 {/* Indicadores de página */}
                 <div className="flex space-x-1">
                   {allComparisons.map((_, index) => (
                     <button
                       key={index}
                       onClick={() => goToBlock(index)}
-                      className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
-                        index === currentBlockIndex
-                          ? "bg-primary-600 text-white"
-                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      }`}
+                      className={`w-8 h-8 rounded text-xs font-medium transition-colors ${index === currentBlockIndex
+                        ? "bg-primary-600 text-white"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        }`}
                     >
                       {index + 1}
                     </button>
                   ))}
                 </div>
-                
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -447,7 +469,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                   </svg>
                 </Button>
               </div>
-              
+
               <div className="flex space-x-2">
                 <Button
                   variant="outline"
@@ -476,7 +498,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
             </div>
           )}
-          
+
           {/* Botones de exportación para vista de comparación única */}
           {comparisonId && (
             <div className="flex space-x-2">
@@ -508,7 +530,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="p-6">
         {/* Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -525,7 +547,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 p-2 rounded-md bg-yellow-900">
@@ -541,7 +563,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
               <div className="flex-shrink-0 p-2 rounded-md bg-red-900">
@@ -557,65 +579,61 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
             </div>
           </div>
         </div>
-        
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ResultTab)}>
           <div className="border-b border-gray-700">
             <TabsList className="bg-transparent border-b-0">
-              <TabsTrigger 
-                value="products" 
-                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${
-                  activeTab === "products" 
-                    ? "border-primary-500 text-primary-400" 
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
-                }`}
+              <TabsTrigger
+                value="products"
+                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${activeTab === "products"
+                  ? "border-primary-500 text-primary-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
+                  }`}
               >
                 Productos
               </TabsTrigger>
-              <TabsTrigger 
-                value="metadata" 
-                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${
-                  activeTab === "metadata" 
-                    ? "border-primary-500 text-primary-400" 
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
-                }`}
+              <TabsTrigger
+                value="metadata"
+                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${activeTab === "metadata"
+                  ? "border-primary-500 text-primary-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
+                  }`}
               >
                 Metadatos
               </TabsTrigger>
-              <TabsTrigger 
-                value="json" 
-                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${
-                  activeTab === "json" 
-                    ? "border-primary-500 text-primary-400" 
-                    : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
-                }`}
+              <TabsTrigger
+                value="json"
+                className={`border-b-2 rounded-none px-1 py-3 text-sm font-medium ${activeTab === "json"
+                  ? "border-primary-500 text-primary-400"
+                  : "border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-500"
+                  }`}
               >
                 JSON
               </TabsTrigger>
             </TabsList>
           </div>
-          
+
           <TabsContent value="products" className="pt-6">
             <Accordion type="single" collapsible className="w-full space-y-3">
               {Object.entries(groupedItems).map(([productName, productItems], groupIndex) => {
                 // Determinar el estado global del grupo
-                const groupStatus = productItems.some(item => item.status === "error") 
-                  ? "error" 
-                  : productItems.some(item => item.status === "warning") 
-                    ? "warning" 
+                const groupStatus = productItems.some(item => item.status === "error")
+                  ? "error"
+                  : productItems.some(item => item.status === "warning")
+                    ? "warning"
                     : "match";
-                
+
                 return (
-                  <AccordionItem 
-                    key={groupIndex} 
+                  <AccordionItem
+                    key={groupIndex}
                     value={`item-${groupIndex}`}
-                    className={`border border-gray-700 rounded-md overflow-hidden ${
-                      groupStatus === "error" 
-                        ? "bg-red-900/10 border-red-900/30" 
-                        : groupStatus === "warning" 
-                          ? "bg-yellow-900/10 border-yellow-900/30" 
-                          : "bg-green-900/10 border-green-900/30"
-                    }`}
+                    className={`border border-gray-700 rounded-md overflow-hidden ${groupStatus === "error"
+                      ? "bg-red-900/10 border-red-900/30"
+                      : groupStatus === "warning"
+                        ? "bg-yellow-900/10 border-yellow-900/30"
+                        : "bg-green-900/10 border-green-900/30"
+                      }`}
                   >
                     <AccordionTrigger className="px-4 py-3 hover:no-underline">
                       <div className="flex items-center justify-between w-full">
@@ -643,6 +661,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                                 Estado
                               </th>
                               <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Precio Igual
+                              </th>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                 Nota
                               </th>
                             </tr>
@@ -663,6 +684,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                                 <td className="px-4 py-3">
                                   {renderStatusBadge(item.status)}
                                 </td>
+                                <td className="px-4 py-3">
+                                  {renderPriceMatch(item.priceMatch)}
+                                </td>
                                 <td className="px-4 py-3 text-sm text-gray-300">
                                   {item.note || "-"}
                                 </td>
@@ -677,7 +701,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               })}
             </Accordion>
           </TabsContent>
-          
+
           <TabsContent value="metadata" className="pt-6">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-700">
@@ -722,7 +746,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
               </table>
             </div>
           </TabsContent>
-          
+
           <TabsContent value="json" className="pt-6">
             <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-96">
               <pre className="text-xs text-gray-300 font-mono">
@@ -731,7 +755,7 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
             </div>
           </TabsContent>
         </Tabs>
-        
+
         {/* Action Buttons */}
         <div className="mt-6 flex justify-between">
           <div>

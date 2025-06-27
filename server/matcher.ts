@@ -204,6 +204,7 @@ export class MatcherService {
         invoiceValue: item.invoiceValue || "",
         deliveryOrderValue: item.deliveryOrderValue || "",
         status: this.validateStatus(item.status),
+        priceMatch: item.priceMatch,
         note: item.note || ""
       }))
       : [];

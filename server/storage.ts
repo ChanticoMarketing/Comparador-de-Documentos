@@ -98,6 +98,10 @@ export class StorageService {
       rawData: result.rawData || {},
     }).returning();
 
+    // Extract priceMatch from metadata (actual value, not field name)
+    const priceMatchMeta = result.metadata.find(meta => meta.priceMatch !== undefined);
+    const priceMatch = priceMatchMeta?.priceMatch || "N/A";
+
     // Then, insert all items
     if (result.items && result.items.length > 0) {
       await db.insert(comparisonItems).values(
@@ -107,6 +111,7 @@ export class StorageService {
           invoiceValue: item.invoiceValue,
           deliveryOrderValue: item.deliveryOrderValue,
           status: item.status,
+          priceMatch: priceMatch,
           note: item.note || null,
         }))
       );
@@ -125,10 +130,6 @@ export class StorageService {
         }))
       );
     }
-
-    // Extract priceMatch from metadata (actual value, not field name)
-    const priceMatchMeta = result.metadata.find(meta => meta.priceMatch !== undefined);
-    const priceMatch = priceMatchMeta?.priceMatch || "N/A";
 
     // Update the session with the result summary
     await db.update(sessions)
@@ -179,6 +180,7 @@ export class StorageService {
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
+        priceMatch: item.priceMatch || "N/A",
         note: item.note || undefined,
       })),
       metadata: comparison.metadata.map((meta: any) => ({
@@ -226,6 +228,7 @@ export class StorageService {
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
+        priceMatch: item.priceMatch || "N/A",
         note: item.note || undefined,
       })),
       metadata: comparison.metadata.map((meta: any) => ({
@@ -272,6 +275,7 @@ export class StorageService {
         invoiceValue: item.invoiceValue,
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
+        priceMatch: item.priceMatch || "N/A",
         note: item.note || undefined,
       })),
       metadata: comparison.metadata.map((meta: any) => ({

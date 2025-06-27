@@ -81,6 +81,7 @@ export const comparisonItems = pgTable("comparison_items", {
   invoiceValue: text("invoice_value").notNull(),
   deliveryOrderValue: text("delivery_order_value").notNull(),
   status: text("status").notNull(), // match, warning, error
+  priceMatch: text("price_match").notNull().default("N/A"),
   note: text("note"),
 });
 
