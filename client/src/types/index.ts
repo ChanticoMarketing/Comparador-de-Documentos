@@ -35,6 +35,7 @@ export interface ResultItem {
   invoiceValue: string;
   deliveryOrderValue: string;
   status: "match" | "warning" | "error";
+  priceMatch: string;
   note?: string;
 }
 

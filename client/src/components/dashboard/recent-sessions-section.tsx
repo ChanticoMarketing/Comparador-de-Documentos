@@ -67,6 +67,9 @@ export function RecentSessionsSection() {
                   Resultados
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                  Precio Igual
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                   Acciones
                 </th>
               </tr>
@@ -98,6 +101,23 @@ export function RecentSessionsSection() {
                         {session.errorCount} ✗
                       </span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                    {session.priceMatch === "match" && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-900 text-green-300">
+                        Sí ✓
+                      </span>
+                    )}
+                    {session.priceMatch === "N/A" && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-900 text-yellow-300">
+                        N/A ⚠️
+                      </span>
+                    )}
+                    {session.priceMatch === "error" && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-red-300">
+                        No ✗
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex space-x-3">
                     <Link href={`/comparison/${session.id}`} className="text-primary-400 hover:text-primary-300">
