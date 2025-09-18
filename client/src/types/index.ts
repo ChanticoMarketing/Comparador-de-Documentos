@@ -4,7 +4,7 @@
 export type FileStatus = "pending" | "processing" | "completed" | "error";
 
 // Type of the document
-export type FileType = "invoice" | "deliveryOrder";
+export type FileType = "invoice" | "deliveryOrder" | "singleFile";
 
 // Information about a file being processed
 export interface ProcessingFile {
@@ -36,6 +36,7 @@ export interface ResultItem {
   deliveryOrderValue: string;
   status: "match" | "warning" | "error";
   priceMatch: string;
+  price: string;
   note?: string;
 }
 
@@ -93,6 +94,7 @@ export type ResultTab = "products" | "metadata" | "json";
 // Application settings
 export interface Settings {
   api4aiKey: string;
+  mistralKey: string;
   openaiKey: string;
   openaiModel: string;
   fallbackToMiniModel: boolean;
