@@ -82,6 +82,7 @@ export const comparisonItems = pgTable("comparison_items", {
   deliveryOrderValue: text("delivery_order_value").notNull(),
   status: text("status").notNull(), // match, warning, error
   priceMatch: text("price_match").notNull().default("N/A"),
+  price: text("price"),
   note: text("note"),
 });
 
@@ -113,6 +114,7 @@ export const pgSessions = pgTable("session", {
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
   api4aiKey: text("api4ai_key"),
+  mistralKey: text("mistral_key"),
   openaiKey: text("openai_key"),
   openaiModel: text("openai_model").default("gpt-4o"),
   fallbackToMiniModel: boolean("fallback_to_mini_model").default(true),
