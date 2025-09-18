@@ -407,6 +407,13 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
     return acc;
   }, {});
 
+  // Debug: Log items to see if price field is present
+  console.log("Items with price field:", items.map(item => ({
+    productName: item.productName,
+    price: item.price,
+    priceMatch: item.priceMatch
+  })));
+
   return (
     <Card id="results-section" className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
@@ -664,6 +671,9 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                                 Precio Igual
                               </th>
                               <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Precio
+                              </th>
+                              <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                 Nota
                               </th>
                             </tr>
@@ -686,6 +696,11 @@ export function ResultsSection({ comparisonId }: ResultsSectionProps) {
                                 </td>
                                 <td className="px-4 py-3">
                                   {renderPriceMatch(item.priceMatch)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-300">
+                                  <span className="font-medium text-green-400">
+                                    {item.price || "-"}
+                                  </span>
                                 </td>
                                 <td className="px-4 py-3 text-sm text-gray-300">
                                   {item.note || "-"}

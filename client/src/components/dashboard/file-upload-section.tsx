@@ -13,6 +13,8 @@ interface ComparisonBlock {
   id: string;
   invoiceFiles: File[];
   deliveryFiles: File[];
+  singleFileMode: boolean; // Nuevo campo para el modo de archivo único
+  singleFile: File | null; // Archivo único cuando singleFileMode es true
 }
 
 export function FileUploadSection() {
@@ -21,7 +23,9 @@ export function FileUploadSection() {
     {
       id: "block-" + Date.now(),
       invoiceFiles: [],
-      deliveryFiles: []
+      deliveryFiles: [],
+      singleFileMode: false, // Estado por defecto para el modo de archivo único
+      singleFile: null
     }
   ]);
   
@@ -39,22 +43,37 @@ export function FileUploadSection() {
         throw new Error("Bloque no encontrado");
       }
       
-      if (block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0) {
-        throw new Error("Debe seleccionar al menos un archivo de factura y un archivo de orden de entrega");
+      let formData: FormData;
+      
+      if (block.singleFileMode) {
+        // Modo archivo único
+        if (!block.singleFile) {
+          throw new Error("Debe seleccionar un archivo");
+        }
+        
+        formData = new FormData();
+        formData.append("blockId", blockId);
+        formData.append("singleFile", block.singleFile); 
+        formData.append("mode", "single");
+        
+      } else {
+        // Modo múltiples archivos
+        if (block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0) {
+          throw new Error("Debe seleccionar al menos un archivo de factura y un archivo de entrega");
+        }
+        
+        formData = new FormData();
+        formData.append("blockId", blockId);
+        formData.append("mode", "multiple");
+        
+        block.invoiceFiles.forEach((file) => {
+          formData.append("invoices", file);
+        });
+        
+        block.deliveryFiles.forEach((file) => {
+          formData.append("deliveryOrders", file);
+        });
       }
-
-      const formData = new FormData();
-      
-      // Añadimos identificador de bloque para futura referencia
-      formData.append("blockId", blockId);
-      
-      block.invoiceFiles.forEach((file) => {
-        formData.append("invoices", file);
-      });
-      
-      block.deliveryFiles.forEach((file) => {
-        formData.append("deliveryOrders", file);
-      });
       
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -88,7 +107,9 @@ export function FileUploadSection() {
         {
           id: "block-" + Date.now(),
           invoiceFiles: [],
-          deliveryFiles: []
+          deliveryFiles: [],
+          singleFileMode: false, // Resetear el modo de archivo único
+          singleFile: null
         }
       ]);
       
@@ -127,6 +148,17 @@ export function FileUploadSection() {
     );
   };
 
+  // Manejador para archivo único
+  const handleSingleFileSelected = (blockId: string, files: File[]) => {
+    setBlocks(prev => 
+      prev.map(block => 
+        block.id === blockId 
+          ? { ...block, singleFile: files[0] || null } 
+          : block
+      )
+    );
+  };
+
   // Función para iniciar el procesamiento de un bloque específico
   const handleUpload = (blockId: string) => {
     uploadMutation.mutate(blockId);
@@ -135,9 +167,13 @@ export function FileUploadSection() {
   // Mutación separada para procesar múltiples bloques
   const uploadAllMutation = useMutation({
     mutationFn: async () => {
-      const validBlocks = blocks.filter(block => 
-        block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0
-      );
+      const validBlocks = blocks.filter(block => {
+        if (block.singleFileMode) {
+          return block.singleFile !== null;
+        } else {
+          return block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0;
+        }
+      });
       
       if (validBlocks.length === 0) {
         throw new Error("No hay bloques válidos para procesar");
@@ -157,15 +193,23 @@ export function FileUploadSection() {
           const formData = new FormData();
           formData.append("blockId", block.id);
           
-          // Agregar archivos de facturas
-          block.invoiceFiles.forEach(file => {
-            formData.append("invoices", file);
-          });
-          
-          // Agregar archivos de órdenes de entrega
-          block.deliveryFiles.forEach(file => {
-            formData.append("deliveryOrders", file);
-          });
+          if (block.singleFileMode) {
+            // Modo archivo único
+            formData.append("singleFile", block.singleFile!);
+            formData.append("mode", "single");
+          } else {
+            // Modo múltiples archivos
+            // Agregar archivos de facturas
+            block.invoiceFiles.forEach(file => {
+              formData.append("invoices", file);
+            });
+            
+            // Agregar archivos de órdenes de entrega
+            block.deliveryFiles.forEach(file => {
+              formData.append("deliveryOrders", file);
+            });
+            formData.append("mode", "multiple");
+          }
           
           // Enviar este bloque al servidor y esperar respuesta completa
           const response = await fetch("/api/upload", {
@@ -233,14 +277,18 @@ export function FileUploadSection() {
 
   // Función para procesar todos los bloques válidos de una vez
   const handleUploadAll = () => {
-    const validBlocks = blocks.filter(block => 
-      block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0
-    );
+    const validBlocks = blocks.filter(block => {
+      if (block.singleFileMode) {
+        return block.singleFile !== null;
+      } else {
+        return block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0;
+      }
+    });
     
     if (validBlocks.length === 0) {
       toast({
         title: "No hay bloques válidos",
-        description: "Cada bloque debe tener al menos una factura y una orden de entrega",
+        description: "Cada bloque debe tener archivos válidos según su modo",
         variant: "destructive",
       });
       return;
@@ -256,7 +304,9 @@ export function FileUploadSection() {
       {
         id: "block-" + Date.now(),
         invoiceFiles: [],
-        deliveryFiles: []
+        deliveryFiles: [],
+        singleFileMode: false, // Estado por defecto para el modo de archivo único
+        singleFile: null
       }
     ]);
   };
@@ -269,6 +319,23 @@ export function FileUploadSection() {
     setBlocks(prev => prev.filter(block => block.id !== blockId));
   };
 
+  // Función para cambiar el modo de archivo único/múltiple
+  const toggleFileMode = (blockId: string) => {
+    setBlocks(prev => 
+      prev.map(block => 
+        block.id === blockId 
+          ? { 
+              ...block, 
+              singleFileMode: !block.singleFileMode,
+              singleFile: null, // Limpiar archivo único
+              invoiceFiles: [], // Limpiar archivos de facturas
+              deliveryFiles: [] // Limpiar archivos de órdenes de entrega
+            } 
+          : block
+      )
+    );
+  };
+
   return (
     <Card className="mt-6 bg-gray-800 border-gray-700">
       <CardHeader className="border-b border-gray-700">
@@ -276,8 +343,26 @@ export function FileUploadSection() {
           Subir archivos para comparar
         </CardTitle>
         <CardDescription className="text-gray-400">
-          Arrastra y suelta tus facturas y órdenes de entrega en formato PDF. Puedes crear múltiples bloques para comparaciones simultáneas.
+          Arrastra y suelta tus archivos en formato PDF, JPG o PNG. Puedes crear múltiples bloques para comparaciones simultáneas. Usa el switch para cambiar entre modo de archivo único o múltiples archivos.
         </CardDescription>
+        
+        {/* Upload Options Info */}
+        <div className="mt-4 p-4 bg-blue-950/20 border border-blue-800/30 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+            <div className="text-sm text-blue-200">
+              <p className="font-medium mb-1">Opciones de procesamiento flexibles:</p>
+              <ul className="space-y-1 text-blue-300">
+                <li>• <strong>Archivos:</strong> Usa el switch para cambiar entre modo único (1 archivo) o múltiples archivos (facturas + órdenes)</li>
+                <li>• <strong>Bloques:</strong> Procesa cada bloque por separado o todos juntos</li>
+                <li>• <strong>Flexible:</strong> Mezcla ambos enfoques según necesites</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </CardHeader>
       
       <CardContent className="p-6 space-y-8">
@@ -286,12 +371,49 @@ export function FileUploadSection() {
             {index > 0 && <Separator className="my-6 bg-gray-700" />}
             
             <div className="flex justify-between items-center">
-              <h3 className="text-md font-medium text-white">
-                {block.invoiceFiles.length > 0 
-                  ? `${block.invoiceFiles[0].name.replace(/\.[^/.]+$/, "")}` // Mostrar nombre de factura sin extensión
-                  : `Bloque de comparación ${index + 1}`
-                }
-              </h3>
+              <div className="flex items-center space-x-3">
+                <h3 className="text-md font-medium text-white">
+                  {block.singleFileMode 
+                    ? (block.singleFile 
+                        ? `${block.singleFile.name.replace(/\.[^/.]+$/, "")}` // Mostrar nombre del archivo único sin extensión
+                        : `Bloque de comparación ${index + 1}`
+                      )
+                    : (block.invoiceFiles.length > 0 
+                        ? `${block.invoiceFiles[0].name.replace(/\.[^/.]+$/, "")}` // Mostrar nombre de factura sin extensión
+                        : `Bloque de comparación ${index + 1}`
+                      )
+                  }
+                </h3>
+                <div className="flex items-center space-x-3">
+                  <span className="text-xs text-gray-400">Múltiples archivos</span>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      id={`toggle-${block.id}`}
+                      className="sr-only"
+                      checked={block.singleFileMode}
+                      onChange={() => toggleFileMode(block.id)}
+                    />
+                    <label
+                      htmlFor={`toggle-${block.id}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out cursor-pointer ${
+                        block.singleFileMode 
+                          ? 'bg-blue-600' 
+                          : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${
+                          block.singleFileMode 
+                            ? 'translate-x-6' 
+                            : 'translate-x-1'
+                        }`}
+                      />
+                    </label>
+                  </div>
+                  <span className="text-xs text-gray-400">Archivo único</span>
+                </div>
+              </div>
               {blocks.length > 1 && (
                 <Button 
                   variant="outline" 
@@ -308,24 +430,48 @@ export function FileUploadSection() {
               )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Invoice Upload */}
-              <FileUpload 
-                key={`invoice-${block.id}-${fileUploadKey}`}
-                onFilesSelected={(files) => handleInvoiceFilesSelected(block.id, files)}
-                label="Facturas"
-                description="PDF, JPG o PNG (máx. 10MB)"
-                icon={
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                  </svg>
-                }
-                buttonText="Seleccionar archivos"
-              />
+            {block.singleFileMode ? (
+              // Modo archivo único - mostrar solo un upload box
+              <div className="grid grid-cols-1 gap-6">
+                <FileUpload 
+                  key={`single-${block.id}-${fileUploadKey}`}
+                  onFilesSelected={(files) => handleSingleFileSelected(block.id, files)}
+                  label="Archivo"
+                  description="PDF, JPG o PNG (máx. 10MB)"
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <line x1="10" y1="9" x2="8" y2="9" />
+                    </svg>
+                  }
+                  buttonText="Seleccionar archivo"
+                  singleFileMode={true}
+                />
+              </div>
+            ) : (
+              // Modo múltiples archivos - mostrar dos upload boxes
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Invoice Upload */}
+                <FileUpload 
+                  key={`invoice-${block.id}-${fileUploadKey}`}
+                  onFilesSelected={(files) => handleInvoiceFilesSelected(block.id, files)}
+                  label="Facturas"
+                  description="PDF, JPG o PNG (máx. 10MB)"
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-full w-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <line x1="10" y1="9" x2="8" y2="9" />
+                    </svg>
+                  }
+                  buttonText="Seleccionar archivos"
+                  singleFileMode={false}
+                />
               
               {/* Delivery Order Upload */}
               <FileUpload 
@@ -343,9 +489,38 @@ export function FileUploadSection() {
                   </svg>
                 }
                 buttonText="Seleccionar archivos"
+                singleFileMode={false}
               />
-            </div>
+              </div>
+            )}
             
+            {/* Individual Block Upload Button */}
+            <div className="flex justify-end mt-4">
+              <Button 
+                onClick={() => handleUpload(block.id)}
+                disabled={uploadMutation.isPending || (block.singleFileMode ? !block.singleFile : (block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0))}
+                className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 text-sm font-medium"
+              >
+                {uploadMutation.isPending ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Subiendo...
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    Subir archivos
+                  </>
+                )}
+              </Button>
+            </div>
 
           </div>
         ))}
@@ -369,7 +544,7 @@ export function FileUploadSection() {
         <div className="flex justify-center mt-8 pt-6 border-t border-gray-700">
           <Button 
             onClick={handleUploadAll}
-            disabled={uploadAllMutation.isPending || blocks.every(block => block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0)}
+            disabled={uploadAllMutation.isPending || blocks.every(block => block.singleFileMode ? !block.singleFile : (block.invoiceFiles.length === 0 || block.deliveryFiles.length === 0))}
             className="bg-primary-600 hover:bg-primary-700 text-white px-8 py-3 text-lg font-medium"
             size="lg"
           >
@@ -389,8 +564,8 @@ export function FileUploadSection() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
                 Iniciar todas las comparaciones
-                {blocks.filter(block => block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0).length > 0 && 
-                  ` (${blocks.filter(block => block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0).length} bloques)`
+                {blocks.filter(block => block.singleFileMode ? block.singleFile : (block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0)).length > 0 && 
+                  ` (${blocks.filter(block => block.singleFileMode ? block.singleFile : (block.invoiceFiles.length > 0 && block.deliveryFiles.length > 0)).length} bloques)`
                 }
               </>
             )}

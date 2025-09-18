@@ -112,6 +112,7 @@ export class StorageService {
           deliveryOrderValue: item.deliveryOrderValue,
           status: item.status,
           priceMatch: priceMatch,
+          price: item.price || null,
           note: item.note || null,
         }))
       );
@@ -150,8 +151,9 @@ export class StorageService {
    * Get comparison by ID with all related items and metadata
    */
   async getComparison(comparisonId: number): Promise<ComparisonResult | null> {
+    console.log(`comparisonId:  ${comparisonId}`);
     const comparison = await db.query.comparisons.findFirst({
-      where: eq(comparisons.id, comparisonId),
+      where: eq(comparisons.sessionId, comparisonId),
       with: {
         items: true,
         metadata: true,
@@ -181,6 +183,7 @@ export class StorageService {
         deliveryOrderValue: item.deliveryOrderValue,
         status: item.status as "match" | "warning" | "error",
         priceMatch: item.priceMatch || "N/A",
+        price: item.price || "",
         note: item.note || undefined,
       })),
       metadata: comparison.metadata.map((meta: any) => ({

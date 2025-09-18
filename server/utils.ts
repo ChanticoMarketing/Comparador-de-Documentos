@@ -439,3 +439,11 @@ export function normalizeProductString(str: string): string {
     .trim()                                          // optional: sort words
 }
 
+/**
+ * Check if the mode is single
+ * @param mode The mode to check
+ * @returns True if the mode is single, false otherwise
+ */
+export function isSingleMode(mode: string): boolean {
+  return mode === "single";
+}

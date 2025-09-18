@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getOcrService } from "./ocr";
+import { getAPI4AIOcrService } from "./api4ai-ocr";
+import { getMistralOcrService } from "./mistral-ocr";
 import { getMatcherService } from "./matcher";
 import { authService } from "./auth";
 import { isAuthenticated, AuthRequest, getUserId } from "./auth-config";
@@ -11,10 +12,11 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { ProcessingStatus, Settings } from "../client/src/types";
-import { exportToPdf, exportToExcel } from "./utils";
+import { exportToPdf, exportToExcel, isSingleMode } from "./utils";
 import { db } from "@db";
 import { comparisons } from "@shared/schema";
 import { desc } from "drizzle-orm";
+import { Readable } from "stream";
 
 // Global processing state (in a real app, this would be in a database or Redis)
 interface ProcessingState {
@@ -25,7 +27,7 @@ interface ProcessingState {
   currentAiStage?: string; // Etapa actual del procesamiento de IA (para mostrar en la UI)
   files: Array<{
     name: string;
-    type: "invoice" | "deliveryOrder";
+    type: "invoice" | "deliveryOrder" | "singleFile";
     size: number;
     status: "pending" | "processing" | "completed" | "error";
   }>;
@@ -49,7 +51,7 @@ const createTempDir = (): string => {
   const tempDir = path.join(os.tmpdir(), "ocr-matcher-uploads");
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
-    
+
     // En Replit, aseguramos que el directorio tenga permisos adecuados
     try {
       fs.chmodSync(tempDir, 0o777);
@@ -87,7 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ message: error.message });
     }
   });
-  
+
   app.post("/api/auth/login", (req: Request, res: Response, next) => {
     passport.authenticate("local", (err: Error, user: any) => {
       if (err) {
@@ -96,7 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Credenciales inválidas" });
       }
-      
+
       req.logIn(user, (loginErr) => {
         if (loginErr) {
           return res.status(500).json({ message: "Error al iniciar sesión" });
@@ -105,7 +107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     })(req, res, next);
   });
-  
+
   app.post("/api/auth/logout", (req: Request, res: Response) => {
     req.logout((err) => {
       if (err) {
@@ -114,7 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ message: "Sesión cerrada correctamente" });
     });
   });
-  
+
   app.get("/api/auth/me", (req: Request, res: Response) => {
     if (req.isAuthenticated && req.isAuthenticated()) {
       res.status(200).json(req.user);
@@ -149,9 +151,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching settings:", error);
       return res.status(500).json({
-        message: `Error fetching settings: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching settings: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -162,48 +163,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settingsData = req.body as Settings;
       // Obtener configuración existente para mantener el ID si existe
       const existingSettings = await storage.getSettings();
-      
+
       const settingsToSave: any = {
         api4aiKey: settingsData.api4aiKey || "",
+        mistralKey: settingsData.mistralKey || "",
         openaiKey: settingsData.openaiKey || "",
         openaiModel: settingsData.openaiModel || "gpt-4o",
         fallbackToMiniModel: settingsData.fallbackToMiniModel || true,
         autoSaveResults: settingsData.autoSaveResults || false,
         maxFileSize: settingsData.maxFileSize || 10,
       };
-      
+
       // Si hay configuración existente, usar su ID
       if (existingSettings && existingSettings.id) {
         settingsToSave.id = existingSettings.id;
       }
-      
+
       const updatedSettings = await storage.saveSettings(settingsToSave);
-      
+
       // Update environment variables for keys
       if (settingsData.api4aiKey) {
         process.env.API4AI_KEY = settingsData.api4aiKey;
       }
+      if (settingsData.mistralKey) {
+        process.env.MISTRAL_KEY = settingsData.mistralKey;
+      }
       if (settingsData.openaiKey) {
         process.env.OPENAI_KEY = settingsData.openaiKey;
       }
-      
+
       return res.json({ success: true, settings: updatedSettings });
     } catch (error) {
       console.error("Error updating settings:", error);
       return res.status(500).json({
-        message: `Error updating settings: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error updating settings: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
 
   // Upload files for processing
-  app.post(
-    "/api/upload",
-    upload.fields([
+  app.post("/api/upload", upload.fields([
       { name: "invoices", maxCount: 10 },
       { name: "deliveryOrders", maxCount: 10 },
+      { name: "singleFile", maxCount: 1 }
     ]),
     async (req: Request, res: Response) => {
       try {
@@ -211,12 +214,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           [fieldname: string]: Express.Multer.File[];
         };
 
+        const body = req.body;
+
         // Validate that we have at least one invoice and one delivery order
-        if (!files.invoices || !files.deliveryOrders) {
-          return res.status(400).json({
-            message:
-              "You must upload at least one invoice and one delivery order",
-          });
+        if (isSingleMode(body.mode)) {
+          if (files.singleFile == null) {
+            return res.status(400).json({
+              message: "You must upload a single file when in single mode",
+            });
+          }
+        } else {
+          if (files.invoices.length == 0 && files.deliveryOrders.length == 0) {
+            return res.status(400).json({
+              message:
+                "You must upload at least one invoice and one delivery order",
+            });
+          }
         }
 
         // Verificar si ya hay un procesamiento activo
@@ -227,13 +240,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Determinar el número de pares a procesar
-        const numPairs = Math.min(files.invoices.length, files.deliveryOrders.length);
-        
-        if (files.invoices.length !== files.deliveryOrders.length) {
-          console.warn(`Número de archivos no coincide: ${files.invoices.length} facturas vs ${files.deliveryOrders.length} órdenes. Se procesarán ${numPairs} pares.`);
+        let numPairs = 0;
+        if (isSingleMode(body.mode)) {
+          numPairs = 1;
+        } else {
+          numPairs = Math.min(files.invoices.length, files.deliveryOrders.length);
         }
 
-        console.log(`Iniciando procesamiento de ${numPairs} pares de documentos`);
+        if (!isSingleMode(body.mode)) {
+          if (files.invoices.length !== files.deliveryOrders.length) {
+            console.warn(`Número de archivos no coincide: ${files.invoices.length} facturas vs ${files.deliveryOrders.length} órdenes. Se procesarán ${numPairs} pares.`);
+          }
+        }
+
+        console.log(`Iniciando procesamiento de ${numPairs} de documentos en ${body.mode} mode`);
 
         // Inicializar el estado global del lote
         processingState.isProcessing = true;
@@ -244,33 +264,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processingState.sessionId = undefined; // Ya no es un ID de sesión maestra
 
         // Poblar el estado con todos los archivos del lote
-        files.invoices.forEach((file) => {
+        if (isSingleMode(body.mode)) {
+          const file = files.singleFile[0];
           processingState.files.push({
             name: file.originalname,
-            type: "invoice",
+            type: "singleFile",
             size: file.size,
             status: "pending",
           });
-        });
+        } else {
+          files.invoices.forEach((file) => {
+            processingState.files.push({
+              name: file.originalname,
+              type: "invoice",
+              size: file.size,
+              status: "pending",
+            });
+          });
 
-        files.deliveryOrders.forEach((file) => {
-          processingState.files.push({
-            name: file.originalname,
-            type: "deliveryOrder",
-            size: file.size,
-            status: "pending",
+          files.deliveryOrders.forEach((file) => {
+            processingState.files.push({
+              name: file.originalname,
+              type: "deliveryOrder",
+              size: file.size,
+              status: "pending",
+            });
           });
-        });
+        }
+
 
         // Obtener el ID del usuario si está autenticado
         const userId = getUserId(req as AuthRequest) || undefined;
 
+        let singleFile: Express.Multer.File = {
+          fieldname: 'file',
+          originalname: '',
+          encoding: '7bit',
+          mimetype: 'application/octet-stream',
+          size: 0,
+          destination: '',
+          filename: '',
+          path: '',
+          buffer: Buffer.alloc(0),
+          stream: new Readable({ read() {} }),
+        };
+        
+        if (isSingleMode(body.mode)) {
+          singleFile = files.singleFile[0];
+        }
+
         // Iniciar procesamiento en segundo plano
-        processFiles(files.invoices, files.deliveryOrders, userId || undefined).catch(
+        processFiles(files.invoices, files.deliveryOrders, singleFile, body.mode, userId).catch(
           (error) => {
             const errorMsg = error instanceof Error ? error.message : String(error);
             console.error("Error processing files:", errorMsg);
-            
+
             processingState.isProcessing = false;
             processingState.error = `Error processing files: ${errorMsg}`;
           }
@@ -283,9 +331,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Error uploading files:", error);
         return res.status(500).json({
-          message: `Error uploading files: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          message: `Error uploading files: ${error instanceof Error ? error.message : String(error)
+            }`,
         });
       }
     }
@@ -313,15 +360,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "No hay ningún procesamiento activo en este momento",
       });
     }
-    
+
     // Marcar como cancelado para detener el bucle de procesamiento
     processingState.isProcessing = false;
     processingState.ocrProgress = 0;
     processingState.aiProgress = 0;
     processingState.error = "Procesamiento cancelado por el usuario";
-    
+
     console.log("Procesamiento cancelado correctamente");
-    
+
     return res.json({
       message: "Procesamiento cancelado correctamente",
       success: true,
@@ -338,9 +385,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching sessions:", error);
       return res.status(500).json({
-        message: `Error fetching sessions: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching sessions: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -353,9 +399,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching all sessions:", error);
       return res.status(500).json({
-        message: `Error fetching all sessions: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching all sessions: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -381,9 +426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching session:", error);
       return res.status(500).json({
-        message: `Error fetching session: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching session: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -402,9 +446,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching latest comparison:", error);
       return res.status(500).json({
-        message: `Error fetching latest comparison: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching latest comparison: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -419,32 +462,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           session: true,
         },
       });
-      
+
       console.log("DEBUG: Comparación más reciente:", latestComparison ? {
         id: latestComparison.id,
         sessionId: latestComparison.sessionId,
         invoiceFilename: latestComparison.invoiceFilename,
         createdAt: latestComparison.createdAt
       } : "No encontrada");
-      
+
       if (!latestComparison || !latestComparison.sessionId) {
         console.log("DEBUG: No hay comparaciones o sesiones disponibles");
         return res.json([]);
       }
-      
+
       // Obtener todas las comparaciones de la sesión más reciente
       const sessionComparisons = await storage.getComparisonsBySessionId(latestComparison.sessionId);
-      
+
       console.log(`DEBUG: Encontradas ${sessionComparisons.length} comparaciones de la sesión ${latestComparison.sessionId}`);
       console.log("DEBUG: IDs de comparaciones:", sessionComparisons.map(c => ({ id: c.id, invoice: c.invoiceFilename })));
-      
+
       return res.json(sessionComparisons);
     } catch (error) {
       console.error("Error fetching recent comparisons:", error);
       return res.status(500).json({
-        message: `Error fetching recent comparisons: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error fetching recent comparisons: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -465,7 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Manejamos el tipo de usuario de manera segura
       const authReq = req as unknown as AuthRequest;
-      
+
       // Obtener el ID del usuario actual
       const userId = getUserId(authReq);
       if (!userId) {
@@ -479,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Obtener la comparación
       const comparison = await storage.getComparison(comparisonId);
-      
+
       // Si no existe, retornar 404 con mensaje claro
       if (!comparison) {
         console.error(`Comparación ID ${comparisonId} no encontrada en la base de datos`);
@@ -491,7 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Verificar que la comparación pertenece al usuario (si tiene userId definido)
       // Si el campo userId no está definido en la comparación (migraciones antiguas) permitir acceso
       const comparisonUserId = comparison.userId as number | undefined;
-      
+
       // Solo verificar permisos si el usuario está definido en la comparación
       if (comparisonUserId !== undefined && comparisonUserId !== userId) {
         console.error(`Usuario ${userId} intentó acceder a comparación ${comparisonId} que pertenece a usuario ${comparisonUserId}`);
@@ -506,9 +548,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error(`Error procesando solicitud de comparación:`, error);
       return res.status(500).json({
-        message: `Error al obtener la comparación: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error al obtener la comparación: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -532,9 +573,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error saving comparison:", error);
       return res.status(500).json({
-        message: `Error saving comparison: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `Error saving comparison: ${error instanceof Error ? error.message : String(error)
+          }`,
       });
     }
   });
@@ -588,9 +628,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Error exporting comparison:", error);
         return res.status(500).json({
-          message: `Error exporting comparison: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          message: `Error exporting comparison: ${error instanceof Error ? error.message : String(error)
+            }`,
         });
       }
     }
@@ -603,174 +642,298 @@ export async function registerRoutes(app: Express): Promise<Server> {
 async function processFiles(
   invoiceFiles: Express.Multer.File[],
   deliveryOrderFiles: Express.Multer.File[],
+  singleFile: Express.Multer.File,
+  mode: string,
   userId?: number
 ): Promise<void> {
-  const ocrService = getOcrService();
+  const api4aiOcrService = getAPI4AIOcrService();
+  const mistralOcrService = getMistralOcrService();
   const matcherService = getMatcherService();
   const allTempFiles: string[] = [];
-  
+
   try {
-    // Determinar el número de pares a procesar
-    const numPairs = Math.min(invoiceFiles.length, deliveryOrderFiles.length);
-    console.log(`Procesando ${numPairs} pares de documentos independientes`);
-    
-    // Iterar sobre cada par (invoice, deliveryOrder)
-    for (let i = 0; i < numPairs; i++) {
+    // Procesar en modo single
+    if (isSingleMode(mode)) {
+      const file = singleFile;
+      console.log(`Procesando archivo único: ${file.originalname}`);
+
       // Verificar si el procesamiento fue cancelado
       if (!processingState.isProcessing) {
         console.log("Procesamiento cancelado, deteniendo el bucle");
-        break;
+        return;
       }
-      
-      const invoiceFile = invoiceFiles[i];
-      const deliveryFile = deliveryOrderFiles[i];
-      
-      console.log(`\n=== Procesando par ${i + 1}/${numPairs} ===`);
-      console.log(`Factura: ${invoiceFile.originalname}`);
-      console.log(`Orden de entrega: ${deliveryFile.originalname}`);
-      
-      // **Crear sesión completamente independiente para este par específico**
-      console.log(`Creando sesión completamente nueva para par ${i + 1}: ${invoiceFile.originalname} + ${deliveryFile.originalname}`);
-      
-      // Crear sesión única e independiente para SOLO este par
+
+      console.log(`\n=== Procesando archivo único ${file.originalname} ===`);
+      console.log(`Archivo: ${file.originalname}`);
+
+      // **Crear sesión completamente independiente para este archivo único**
+      console.log(`Creando sesión completamente nueva para archivo único ${file.originalname}`);
+
+      // Crear sesión única e independiente para SOLO este archivo único
       const session = await storage.createSession(
-        invoiceFile.originalname,
-        deliveryFile.originalname,
+        file.originalname,
+        file.originalname,
         userId
       );
       const sessionId = session.id;
-      console.log(`✓ SESIÓN INDEPENDIENTE CREADA - ID: ${sessionId} para par ${i + 1}`);
-      console.log(`   Factura: ${invoiceFile.originalname}`);
-      console.log(`   Orden: ${deliveryFile.originalname}`);
-      
-      // **Actualizar estado (Inicio OCR Par)**
+      console.log(`✓ SESIÓN INDEPENDIENTE CREADA - ID: ${sessionId} para archivo único ${file.originalname}`);
+      console.log(`   Factura: ${file.originalname}`);
+      console.log(`   Orden: ${file.originalname}`);
+
+      // **Actualizar estado (Inicio OCR Archivo Único)**
       // Marcar archivos como "processing"
-      const invoiceFileEntry = processingState.files.find(f => f.name === invoiceFile.originalname && f.type === "invoice");
-      const deliveryFileEntry = processingState.files.find(f => f.name === deliveryFile.originalname && f.type === "deliveryOrder");
-      
-      if (invoiceFileEntry) invoiceFileEntry.status = "processing";
-      if (deliveryFileEntry) deliveryFileEntry.status = "processing";
-      
-      processingState.currentOcrFile = invoiceFile.originalname;
-      
+      const fileEntry = processingState.files.find(f => f.name === file.originalname && f.type === "singleFile");
+
+      if (fileEntry) fileEntry.status = "processing";
+
+      processingState.currentOcrFile = file.originalname;
+
       try {
-        // **OCR Factura**
-        console.log(`OCR: Procesando factura ${invoiceFile.originalname}`);
-        const invoiceOcrResult = await ocrService.extractText(invoiceFile.path);
-        
-        if (invoiceOcrResult.error) {
-          throw new Error(`OCR error en factura: ${invoiceOcrResult.error}`);
+        // **OCR Archivo Único**
+        console.log(`OCR: Procesando archivo único ${file.originalname}`);
+        const fileOcrResult = await mistralOcrService.extractText(file.path);
+
+        if (fileOcrResult.error) {
+          throw new Error(`OCR error en archivo único: ${fileOcrResult.error}`);
         }
-        
-        const invoiceText = invoiceOcrResult.text;
-        
+
+        const fileText = fileOcrResult.text;
+
         // Actualizar progreso OCR (archivos OCR completados / total archivos en lote * 100)
-        const ocrCompletedFiles = (i * 2) + 1; // 2 archivos por par, +1 por la factura actual
-        const totalFilesInBatch = numPairs * 2;
+        const ocrCompletedFiles = 1;
+        const totalFilesInBatch = 1;
         processingState.ocrProgress = Math.floor((ocrCompletedFiles / totalFilesInBatch) * 100);
-        
-        if (invoiceFileEntry) invoiceFileEntry.status = "completed";
-        
-        // **OCR Orden de Entrega**
-        processingState.currentOcrFile = deliveryFile.originalname;
-        console.log(`OCR: Procesando orden de entrega ${deliveryFile.originalname}`);
-        const deliveryOcrResult = await ocrService.extractText(deliveryFile.path);
-        
-        if (deliveryOcrResult.error) {
-          throw new Error(`OCR error en orden de entrega: ${deliveryOcrResult.error}`);
-        }
-        
-        const deliveryText = deliveryOcrResult.text;
-        
-        // Actualizar progreso OCR final para este par
-        const ocrCompletedFilesAfterDelivery = (i * 2) + 2;
-        processingState.ocrProgress = Math.floor((ocrCompletedFilesAfterDelivery / totalFilesInBatch) * 100);
-        
-        if (deliveryFileEntry) deliveryFileEntry.status = "completed";
+
+        if (fileEntry) fileEntry.status = "completed";
         processingState.currentOcrFile = undefined;
-        
-        // **Actualizar estado (Inicio AI Par)**
-        const aiStartedPairs = i; // Pares de AI iniciados
-        processingState.aiProgress = Math.floor((aiStartedPairs / numPairs) * 10);
-        processingState.currentAiStage = `Analizando par ${i + 1}/${numPairs}`;
-        
+
+        // **Actualizar estado (Inicio AI Archivo Único)**
+        const aiStartedFiles = 1; // Archivos de AI iniciados
+        processingState.aiProgress = Math.floor((aiStartedFiles / totalFilesInBatch) * 10);
+        processingState.currentAiStage = `Analizando archivo único ${file.originalname}`;
+
         // **Comparación AI**
-        console.log(`IA: Comparando documentos del par ${i + 1}`);
-        const comparisonResult = await matcherService.compareDocuments(
-          invoiceText,
-          deliveryText,
-          invoiceFile.originalname,
-          deliveryFile.originalname
+        console.log(`IA: Comparando documentos del archivo único ${file.originalname}`);
+        const comparisonResult = await matcherService.compareSingleDocument(
+          fileText,
+          file.originalname
         );
-        
+
         // **Actualizar estado (Fin AI Par)**
-        const aiCompletedPairs = i + 1;
-        processingState.aiProgress = Math.floor((aiCompletedPairs / numPairs) * 100);
-        
+        const aiCompletedPairs = 1;
+        processingState.aiProgress = Math.floor((aiCompletedPairs / totalFilesInBatch) * 100);
+
         // **Guardar Resultado**
         await storage.saveComparisonResult(sessionId, comparisonResult, userId);
-        console.log(`Par ${i + 1} guardado exitosamente con sesión ${sessionId}`);
-        
+        console.log(`Archivo único ${file.originalname} guardado exitosamente con sesión ${sessionId}`);
+
         // **Limpieza de Archivos del Par**
-        await ocrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
-        
+        await mistralOcrService.cleanupFiles([file.path]);
+
         // Actualizar sesión a completada
         await storage.updateSessionStatus(sessionId, "completed");
-        
+
       } catch (pairError) {
-        console.error(`Error procesando par ${i + 1}:`, pairError);
-        
-        // **Manejo de Errores del Par**
+        console.error(`Error procesando archivo único ${file.originalname}:`, pairError);
+
+        // **Manejo de Errores del Archivo Único**
         await storage.updateSessionStatus(sessionId, "error", pairError instanceof Error ? pairError.message : String(pairError));
-        
+
         // Marcar archivos como error
-        if (invoiceFileEntry) invoiceFileEntry.status = "error";
-        if (deliveryFileEntry) deliveryFileEntry.status = "error";
-        
+        if (fileEntry) fileEntry.status = "error";
+
         // Registrar error pero continuar con otros pares
         const errorMessage = pairError instanceof Error ? pairError.message : String(pairError);
-        processingState.error = `Error en par ${i + 1}: ${errorMessage}`;
-        
+        processingState.error = `Error en archivo único ${file.originalname}: ${errorMessage}`;
+
         // Limpiar archivos del par con error
         try {
-          await ocrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
+          await mistralOcrService.cleanupFiles([file.path]);
         } catch (cleanupError) {
           console.error("Error limpiando archivos del par con error:", cleanupError);
         }
       }
-      
+
       // Agregar archivos a la lista para limpieza final (por si algunos no se limpiaron)
-      allTempFiles.push(invoiceFile.path, deliveryFile.path);
-    }
+      allTempFiles.push(file.path);
+
+      // **Finalización del Lote**
+      processingState.isProcessing = false;
+
+      if (!processingState.error) {
+        processingState.ocrProgress = 100;
+        processingState.aiProgress = 100;
+        processingState.currentAiStage = "Procesamiento completado";
+        console.log(`\n=== Lote completado: archivos únicos procesados ===`);
+      } else {
+        console.log(`\n=== Lote completado con errores ===`);
+      } 
     
-    // **Finalización del Lote**
-    processingState.isProcessing = false;
-    
-    if (!processingState.error) {
-      processingState.ocrProgress = 100;
-      processingState.aiProgress = 100;
-      processingState.currentAiStage = "Procesamiento completado";
-      console.log(`\n=== Lote completado: ${numPairs} pares procesados ===`);
     } else {
-      console.log(`\n=== Lote completado con errores ===`);
+      // Procesar en modo multiple
+
+      // Determinar el número de pares a procesar
+      const numPairs = Math.min(invoiceFiles.length, deliveryOrderFiles.length);
+      console.log(`Procesando ${numPairs} pares de documentos independientes`);
+
+      // Iterar sobre cada par (invoice, deliveryOrder)
+      for (let i = 0; i < numPairs; i++) {
+        // Verificar si el procesamiento fue cancelado
+        if (!processingState.isProcessing) {
+          console.log("Procesamiento cancelado, deteniendo el bucle");
+          break;
+        }
+
+        const invoiceFile = invoiceFiles[i];
+        const deliveryFile = deliveryOrderFiles[i];
+
+        console.log(`\n=== Procesando par ${i + 1}/${numPairs} ===`);
+        console.log(`Factura: ${invoiceFile.originalname}`);
+        console.log(`Orden de entrega: ${deliveryFile.originalname}`);
+
+        // **Crear sesión completamente independiente para este par específico**
+        console.log(`Creando sesión completamente nueva para par ${i + 1}: ${invoiceFile.originalname} + ${deliveryFile.originalname}`);
+
+        // Crear sesión única e independiente para SOLO este par
+        const session = await storage.createSession(
+          invoiceFile.originalname,
+          deliveryFile.originalname,
+          userId
+        );
+        const sessionId = session.id;
+        console.log(`✓ SESIÓN INDEPENDIENTE CREADA - ID: ${sessionId} para par ${i + 1}`);
+        console.log(`   Factura: ${invoiceFile.originalname}`);
+        console.log(`   Orden: ${deliveryFile.originalname}`);
+
+        // **Actualizar estado (Inicio OCR Par)**
+        // Marcar archivos como "processing"
+        const invoiceFileEntry = processingState.files.find(f => f.name === invoiceFile.originalname && f.type === "invoice");
+        const deliveryFileEntry = processingState.files.find(f => f.name === deliveryFile.originalname && f.type === "deliveryOrder");
+
+        if (invoiceFileEntry) invoiceFileEntry.status = "processing";
+        if (deliveryFileEntry) deliveryFileEntry.status = "processing";
+
+        processingState.currentOcrFile = invoiceFile.originalname;
+
+        try {
+          // **OCR Factura**
+          console.log(`OCR: Procesando factura ${invoiceFile.originalname}`);
+          const invoiceOcrResult = await mistralOcrService.extractText(invoiceFile.path);
+
+          if (invoiceOcrResult.error) {
+            throw new Error(`OCR error en factura: ${invoiceOcrResult.error}`);
+          }
+
+          const invoiceText = invoiceOcrResult.text;
+
+          // Actualizar progreso OCR (archivos OCR completados / total archivos en lote * 100)
+          const ocrCompletedFiles = (i * 2) + 1; // 2 archivos por par, +1 por la factura actual
+          const totalFilesInBatch = numPairs * 2;
+          processingState.ocrProgress = Math.floor((ocrCompletedFiles / totalFilesInBatch) * 100);
+
+          if (invoiceFileEntry) invoiceFileEntry.status = "completed";
+
+          // **OCR Orden de Entrega**
+          processingState.currentOcrFile = deliveryFile.originalname;
+          console.log(`OCR: Procesando orden de entrega ${deliveryFile.originalname}`);
+          const deliveryOcrResult = await mistralOcrService.extractText(deliveryFile.path);
+
+          if (deliveryOcrResult.error) {
+            throw new Error(`OCR error en orden de entrega: ${deliveryOcrResult.error}`);
+          }
+
+          const deliveryText = deliveryOcrResult.text;
+
+          // Actualizar progreso OCR final para este par
+          const ocrCompletedFilesAfterDelivery = (i * 2) + 2;
+          processingState.ocrProgress = Math.floor((ocrCompletedFilesAfterDelivery / totalFilesInBatch) * 100);
+
+          if (deliveryFileEntry) deliveryFileEntry.status = "completed";
+          processingState.currentOcrFile = undefined;
+
+          // **Actualizar estado (Inicio AI Par)**
+          const aiStartedPairs = i; // Pares de AI iniciados
+          processingState.aiProgress = Math.floor((aiStartedPairs / numPairs) * 10);
+          processingState.currentAiStage = `Analizando par ${i + 1}/${numPairs}`;
+
+          // **Comparación AI**
+          console.log(`IA: Comparando documentos del par ${i + 1}`);
+          const comparisonResult = await matcherService.compareDocuments(
+            invoiceText,
+            deliveryText,
+            invoiceFile.originalname,
+            deliveryFile.originalname
+          );
+
+          // **Actualizar estado (Fin AI Par)**
+          const aiCompletedPairs = i + 1;
+          processingState.aiProgress = Math.floor((aiCompletedPairs / numPairs) * 100);
+
+          // **Guardar Resultado**
+          await storage.saveComparisonResult(sessionId, comparisonResult, userId);
+          console.log(`Par ${i + 1} guardado exitosamente con sesión ${sessionId}`);
+
+          // **Limpieza de Archivos del Par**
+          await mistralOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
+
+          // Actualizar sesión a completada
+          await storage.updateSessionStatus(sessionId, "completed");
+
+        } catch (pairError) {
+          console.error(`Error procesando par ${i + 1}:`, pairError);
+
+          // **Manejo de Errores del Par**
+          await storage.updateSessionStatus(sessionId, "error", pairError instanceof Error ? pairError.message : String(pairError));
+
+          // Marcar archivos como error
+          if (invoiceFileEntry) invoiceFileEntry.status = "error";
+          if (deliveryFileEntry) deliveryFileEntry.status = "error";
+
+          // Registrar error pero continuar con otros pares
+          const errorMessage = pairError instanceof Error ? pairError.message : String(pairError);
+          processingState.error = `Error en par ${i + 1}: ${errorMessage}`;
+
+          // Limpiar archivos del par con error
+          try {
+            await mistralOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
+          } catch (cleanupError) {
+            console.error("Error limpiando archivos del par con error:", cleanupError);
+          }
+        }
+
+        // Agregar archivos a la lista para limpieza final (por si algunos no se limpiaron)
+        allTempFiles.push(invoiceFile.path, deliveryFile.path);
+      }
+
+      // **Finalización del Lote**
+      processingState.isProcessing = false;
+
+      if (!processingState.error) {
+        processingState.ocrProgress = 100;
+        processingState.aiProgress = 100;
+        processingState.currentAiStage = "Procesamiento completado";
+        console.log(`\n=== Lote completado: ${numPairs} pares procesados ===`);
+      } else {
+        console.log(`\n=== Lote completado con errores ===`);
+      }
     }
-    
+
   } catch (error) {
     console.error("Error fatal durante el procesamiento del lote:", error);
-    
+
     // Actualizar estado global
     processingState.isProcessing = false;
     processingState.error = error instanceof Error ? error.message : String(error);
-    
+
     // Limpiar todos los archivos temporales restantes
     if (allTempFiles.length > 0) {
       try {
-        await ocrService.cleanupFiles(allTempFiles);
+        await mistralOcrService.cleanupFiles(allTempFiles);
       } catch (cleanupError) {
         console.error("Error en limpieza final de archivos:", cleanupError);
       }
     }
-    
+
     throw error;
   }
 }

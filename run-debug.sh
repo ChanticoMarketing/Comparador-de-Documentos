@@ -18,6 +18,7 @@ fi
 echo "=== Verificación de credenciales ==="
 # Verificar las variables de entorno (sin mostrar los valores)
 echo "API4AI_KEY: $(if [ -n "$API4AI_KEY" ]; then echo "CONFIGURADA"; else echo "NO CONFIGURADA"; fi)"
+echo "MISTRAL_KEY: $(if [ -n "$MISTRAL_KEY" ]; then echo "CONFIGURADA"; else echo "NO CONFIGURADA"; fi)"
 echo "OPENAI_API_KEY: $(if [ -n "$OPENAI_API_KEY" ]; then echo "CONFIGURADA"; else echo "NO CONFIGURADA"; fi)"
 echo "DATABASE_URL: $(if [ -n "$DATABASE_URL" ]; then echo "CONFIGURADA"; else echo "NO CONFIGURADA"; fi)"
 
