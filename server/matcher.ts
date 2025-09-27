@@ -168,6 +168,7 @@ export class MatcherService {
     You have to normalize the unit to milliliters or grams if any. 
     The input text will sometimes be a bit messy, try to always associate 1 product with 1 quantity when you detect the column, a fifo in other words.
     And if you found duplicates items by list, sum them.
+    Consider if you detect the column of number of pieces or total pieces, you have to associate the product with the quantity on that column and not the quantity on the name of the product.
     
     Additionally, extract the unit price and calculate the total price (unit price × quantity) for each item list.  
     Then, compare the total prices of both lists (invoiceList and deliveryOrderList) and determine a general priceMatch status to include in the metadata section:
@@ -272,6 +273,7 @@ export class MatcherService {
     - Extract unit price when present; compute line total: unit price × normalized quantity (respect decimal/currency formats like $ 1,234.56 or 1.234,56).
       • If price is per pack, normalize to per unit before multiplying.
       • Keep currency symbol from the source if available, else default to empty symbol but numeric value preserved.
+    - Consider if you detect the column of number of pieces or total pieces, you have to associate the product with the quantity on that column and not the quantity on the name of the product
 
     Matching rules:
     - Fuzzy match product names across lists (e.g., “agua min 1000 12p” ≈ “agua mineral 1000ml”).
