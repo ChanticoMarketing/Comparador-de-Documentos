@@ -106,6 +106,7 @@ export class MistralOcrService {
             });
 
             const uploadResult = await uploadResponse.data as MistralErrorResponse | MistralUploadSuccessResponse;
+            console.log("File uploaded successfully", uploadResult.id);
             
             const response = await axios({
                 method: "post",
@@ -134,6 +135,7 @@ export class MistralOcrService {
             }
 
             // Process the response to extract text and structured data
+            console.log("result", result);
             const newRawText = newExtractRawText(result);
 
             return {
@@ -212,7 +214,7 @@ function newExtractRawText(result: any): string {
         console.log("Procesando texto extraído usando formato text_blocks standard");
         result.pages.forEach((block: any) => {
             if (block.markdown) {
-                fullText += normalizeProductString(block.markdown) + '\n';
+                fullText += block.markdown + '\n';
             }
         });
     }
@@ -223,7 +225,7 @@ function newExtractRawText(result: any): string {
     if (!trimmedText) {
         console.warn("No se pudo extraer texto del documento. Respuesta:", JSON.stringify(result).substring(0, 500) + "...");
     } else {
-        console.log(`Texto extraído exitosamente (${trimmedText.length} caracteres)`);
+        console.log(`Texto extraído exitosamente (${trimmedText} caracteres)`);
     }
 
     return trimmedText;
