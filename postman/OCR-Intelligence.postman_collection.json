@@ -1,0 +1,555 @@
+{
+	"info": {
+		"_postman_id": "88054f62-4139-4c8b-837e-7729384a6ee1",
+		"name": "OCR-Intelligence",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "14151799"
+	},
+	"item": [
+		{
+			"name": "Rapidaoi",
+			"item": [
+				{
+					"name": "image results",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-rapidapi-key",
+								"value": "0140c8bd9dmsh0d6fedf6fce5bfap142528jsnc9db91d3fbe0"
+							},
+							{
+								"key": "x-rapidapi-host",
+								"value": "ocr43.p.rapidapi.com"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": "/C:/Users/baker/OneDrive/Documentos/GitHub/ocr/sample-pdf/ENTRADA DE MERCANCÍA 9119026391.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://ocr43.p.rapidapi.com/v1/results",
+							"protocol": "https",
+							"host": [
+								"ocr43",
+								"p",
+								"rapidapi",
+								"com"
+							],
+							"path": [
+								"v1",
+								"results"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "rapidapi results",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-rapidapi-key",
+										"value": "0140c8bd9dmsh0d6fedf6fce5bfap142528jsnc9db91d3fbe0"
+									},
+									{
+										"key": "x-rapidapi-host",
+										"value": "ocr43.p.rapidapi.com"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/x-www-form-urlencoded"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "image",
+											"type": "file",
+											"src": "/C:/Users/baker/Dev/sample-pdf/9118351714.pdf"
+										}
+									]
+								},
+								"url": {
+									"raw": "https://ocr43.p.rapidapi.com/v1/results",
+									"protocol": "https",
+									"host": [
+										"ocr43",
+										"p",
+										"rapidapi",
+										"com"
+									],
+									"path": [
+										"v1",
+										"results"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Date",
+									"value": "Sat, 10 May 2025 16:41:38 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "6398"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "X-Cloud-Trace-Context",
+									"value": "148e70519d20d3d5ca3a6121ab758a3f;o=1"
+								},
+								{
+									"key": "A4a-Billing",
+									"value": "Credits=2"
+								},
+								{
+									"key": "Traceparent",
+									"value": "projects/api4ai-production/traces/148e70519d20d3d5ca3a6121ab758a3f"
+								},
+								{
+									"key": "Alt-Svc",
+									"value": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"
+								},
+								{
+									"key": "Alt-Svc",
+									"value": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"
+								},
+								{
+									"key": "Alt-Svc",
+									"value": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"
+								},
+								{
+									"key": "Via",
+									"value": "1.1 google"
+								},
+								{
+									"key": "X-RateLimit-Credits-Limit",
+									"value": "10000"
+								},
+								{
+									"key": "X-RateLimit-Credits-Remaining",
+									"value": "9985"
+								},
+								{
+									"key": "X-RateLimit-Credits-Reset",
+									"value": "1046503"
+								},
+								{
+									"key": "Server",
+									"value": "RapidAPI-1.2.8"
+								},
+								{
+									"key": "X-RapidAPI-Version",
+									"value": "1.2.8"
+								},
+								{
+									"key": "X-RapidAPI-Region",
+									"value": "AWS - us-east-1"
+								},
+								{
+									"key": "X-RapidAPI-Request-Id",
+									"value": "50555c63f988bd49c7396ab1cbfb4d41e8764129ffbc5951e005b3af65ea7777"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"results\": [\n        {\n            \"status\": {\n                \"code\": \"ok\",\n                \"message\": \"Success\"\n            },\n            \"name\": \"9118351714.pdf\",\n            \"md5\": \"e8632b1cfd97cfcd67875cafa07d903b\",\n            \"page\": 1,\n            \"width\": 1700,\n            \"height\": 2200,\n            \"entities\": [\n                {\n                    \"kind\": \"objects\",\n                    \"name\": \"text\",\n                    \"objects\": [\n                        {\n                            \"box\": [\n                                0.08352941176470588,\n                                0.019090909090909092,\n                                0.8429411764705882,\n                                0.9281818181818182\n                            ],\n                            \"entities\": [\n                                {\n                                    \"kind\": \"text\",\n                                    \"name\": \"text\",\n                                    \"text\": \"Grupo\\nPeñafiel\\nUna Compañía de Keurig Dr Pepper\\nDOMICILIO FISCAL:\\nBLVD MANUEL AVILA C 32 101 PISO 1\\nCOL: LOMAS DE CHAPULTEPEC I SECCION\\nC.P. 11000 MIGUEL HIDALGO CD DE MEXICO, MEXICO\\nPEÑAFIEL BEBIDAS\\nR.F.C. PBE900712TV4\\n601 Regimen General de Ley Personas Morales\\nEXPEDIDO EN:\\nCERRADA DE PROTON 5\\nCOL: PARQUE INDUSTRIAL NAUCALPAN\\nC.P. 53370 NAUCALPAN ESTADO DE MEXICO, MEXICO\\nGO MART CENTRO\\nEXPORTACION\\n01- No aplica\\nVENDO A:\\nINSURGENTES 23 PISO 4 402\\nCOL. SAN RAFAEL\\nC.P. 06470 CUAUHTEMOC CD DE MEXICO, MEXICO\\nR.F.C. GMC211013GP3\\nTIPO COMPROBANTE\\n1- Ingreso\\nFACTURA\\nFECHA\\nSERIE\\nNO.\\n2024-05-29T00:00:01\\nNAUL\\n206563\\nFOLIO FISCAL: AF8C474F-1D80-11EF-A27A-6BD05714B71D\\nCITA\\nNUMERO\\nFECHA/HORA\\n0000-00-00 /\\nUSO CFDI\\nMONEDA\\nFORMA DE PAGO\\nG01 Adquisición de\\nmercancías\\nMXN\\n99 Por definir\\nNúmero de Certificado 00001000000505301005\\nGO MART CENTRO\\nCONSIGNADO A:\\nSucursal: No. Sucursal\\nVIALIDAD MEXIQUENSE S/N\\nCOL: SAN FRANCISCO COACALCO CABECERA MUN\\nC.P. 55700 COACALCO DE BERRIOZABAL ESTADO DE MEXICO, MEXICO\\nRégimen Fiscal Receptor: 601 Regimen General de Ley Personas Morales\\nPEDIDO CLIENTE\\nNUESTRO PEDIDO\\nCONDICIONES DE\\nPAGO\\nNUM DE CLIENTE\\nCONDUCTO\\nFOLIO-SAP\\nSAP-CANAL\\nMETODO DE PAGO\\n0590228052410005\\n2114509841\\nCREDITO 45 Dias\\n9019489-646660\\nALEJANDRO\\n11839071-9118351714 Tiendas de Convenien\\nPPD Pago en\\nparcialidades o diferido\\nCODIGO DE\\nCODIGO DE BARRAS\\nPRODUCTO\\nCLAVE\\nPRODSERV\\nCANTIDAD UNIDAD\\nDESCRIPCION\\nPRECIO\\nUNITARIO\\nBASE\\nDESCUENTO\\nIMPORTE TOTAL\\n7501073830028\\n10000020\\n50202310\\n1\\nCaja\\nPENAFIEL AGUA MIN 1L P 12P\\n168.10\\n168.10\\n16.81\\n151.29\\n7501073800908\\n10000038\\n50202310\\n3\\nCaja\\nPENAFIEL AGUA MIN 2L P 8P\\n155.02\\n465.06\\n46.51\\n418.55\\n7501073825208\\n10000065\\n50202306\\n1\\nCaja\\nSCHWEPPES AGUA TONICA0.296L\\nVNR 12P\\n115.07\\n115.07\\n11.51\\n103.56\\n7501073839212\\n10000531\\n50202310\\n1\\nCaja\\nPENAFIEL TWIST LIMON 1L P 12P\\n160.00\\n160.00\\n16.00\\n144.00\\n7501073842717\\n10001624\\n50202310\\n1\\nCaja\\nPENAFIEL MANZANADA 0.6L P 12P\\n151.07\\n151.07\\n15.11\\n135.96\\n90453083\\n10002131\\n50202309\\n2\\nCaja\\nRED BULL SANDIA 0.250L L4P\\n129.31\\n258.63\\n0.00\\n258.63\\n9002490207717\\n10002134\\n50202309\\n4\\nCaja\\nRED BULL ENERGY DRINK 0.355L L 4P\\n174.13\\n696.55\\n0.00\\n696.55\\nTOTAL CAJAS: 13\\nTOTAL PIEZAS: 96\\nCUENTA DE PAGO: NO APLICA\\nCANTIDAD CON LETRA:\\nDOS MIL DOSCIENTOS TRECE PESOS 91/100 M.N.\\nMana de ferm\\nвет\\nMAN 2024\\nGler\\nRECIPTO\\nMonte Bianco\\nSUB-TOTAL\\nDESCUENTOS\\n2,014.48\\n105.94\\nIMPORTE\\n1,908.54\\nIEPS %\\n0.00\\nIEPS 1 $\\n0.00\\nIVA\\n305.37\\n0.00\\nRETENCIONES ISR\\n0.00\\n2,213.91\\nIVA RETENIDO\\nTOTAL FACTURA\\nPAGARE\\nMÉXICO D.F2024-05-29T00:00:01 DEBO(EMOS) Y PAGARE (MOS) INCONDICIONALMENTE A LA ORDEN DE PEÑAFIEL BEBIDAS SA DE CV CON DOMICILIO EN BLVD MANUEL AVILA C 32\\n101 PISO 1 LOMAS DE CHAPULTEPEC I SECCION C.P. 11000 MIGUEL HIDALGO CD DE MEXICO, EL DIA 2024-05-29T00:00:01 LA CANTIDAD DE: $ 2,213.91 (DOS MIL DOSCIENTOS\\nTRECE PESOS 91/100 M.N.) VALOR RECIBIDO EN MERCANCIAS A MI ENTERA SATISFACCION. DESDE LA FECHA DE VENCIMIENTO DE ESTE DOCUMENTO HASTA EL DIA DE SU\\nLIQUIDACION SE CAUSARAN INTERESES MORATORIOS AL TIPO DEL 5% (CINCO PORCIENTO) MENSUAL, PAGADEROS EN ESTA CIUDAD JUNTAMENTE CON EL PRINCIPAL. CON LA\\nFIRMA PUESTA EN CUALQUIER LUGAR DE LA PRESENTE FACTURA-PAGARE SE ENTIENDE POR ACEPTADO EL MISMO.ESTA FACTURA DEBERA PAGARSE EN UNA SOLA\\nEXHIBICION.\\nFECHA\\nFIRMA\\nEL PRESTADOR RECONOCE QUE \\\"PEÑAFIEL\\\" ES UNA ENTIDAD LEGAL SUBSIDIARIA DE KEURIG DR PEPPER, MOTIVO POR EL CUAL CUMPLE CON LA LEY DE PRÁCTICAS\\nCORRUPTAS EN EL EXTRANJERO (FCPA), ASIMISMO MANIFIESTA QUE \\\"PEÑAFIEL\\\" PONE A SU DISPOSICIÓN LA POLÍTICA DE PROHIBICIÓN DE PRÁCTICAS CORRUPTAS EN EL\\nEXTRANJERO (FCPA) EN WWW.GRUPOPEÑAFIEL.COM.MX. DERIVADO DE LO ANTERIOR \\\"EL PRESTADOR\\\" SE OBLIGA A CONOCERLA Y RESPETARLA, AUTORIZANDO A \\\"PEÑAFIEL\\\"\\nPARA REVISAR SU CUMPLIMIENTO, Y RECONOCE QUE EN CASO DE CUALQUIER INCUMPLIMIENTO A LA MISMA, SERÁ MOTIVO DE TERMINACIÓN INMEDIATA DEL PRESENTE\\nCONTRATO Y DEBERÁ RESPONDER A \\\"PEÑAFIEL\\\" POR LOS DAÑOS Y PERJUICIOS QUE DICHO INCUMPLIMIENTO LE GENERE.\\nNAUL-206563\\nESTE DOCUMENTO ES UNA REPRESENTACION IMPRESA DE UN CFDI\\nPAGINA: 1/2\"\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        },\n        {\n            \"status\": {\n                \"code\": \"ok\",\n                \"message\": \"Success\"\n            },\n            \"name\": \"9118351714.pdf\",\n            \"md5\": \"e8632b1cfd97cfcd67875cafa07d903b\",\n            \"page\": 2,\n            \"width\": 1700,\n            \"height\": 2200,\n            \"entities\": [\n                {\n                    \"kind\": \"objects\",\n                    \"name\": \"text\",\n                    \"objects\": [\n                        {\n                            \"box\": [\n                                0.07529411764705882,\n                                0.02772727272727273,\n                                0.8358823529411765,\n                                0.9222727272727272\n                            ],\n                            \"entities\": [\n                                {\n                                    \"kind\": \"text\",\n                                    \"name\": \"text\",\n                                    \"text\": \"cfdi.xml\\nCADENA ORIGINAL DEL COMPLEMENTO\\n||1.1|AF8C474F-1D80-11EF-A27A-6BD05714B71D12024-05-29T00:34:24|EME000602QR9|QqRmD/SKmJWZfpq6xXtlTu2\\nmLÖsulRnjrsu2T17EKU+Cf33zmCZLibASjuN4Zrx9BcfTNbOobtXews8n8qyKg3Um60Qc+QHGmTMfQmfEmzU2klEx70MosxPRfSY\\nYBOD7Q3QccT0Oqhyl2EjgMWF9jG2FOlwf3C2qISTWFdXxEDgsqsjJtOHW/HKK6AQ1qGyQgsWc5BW0sTJLDZWEhFTZZZUOgCd73iP\\nOrGZ7qZZOMijNwQ3dv7gS6rGÉvdLaxH9VWJmS7mDHL3giF/er6d0s+E2jIDjRQGQaECODLBhwJFimLHTEE72eZ8M/dokc5PE120/\\nEy4e0g6GmwHB4yrA+A==100001000000700047508||\\nNÚMERO DE CERTIFICADO SAT\\n00001000000700047508\\nNÚMERO DE CERTIFICADO EMISOR\\n00001000000505301005\\nSELLO DIGITAL DEL SAT\\nQqRmD/\\nFECHA DE AUTORIZACIÓN SAT\\n29052024003424\\nSKMJWZfpqs6xXtITu2mLOsulRnjrsu2T17EKU+Cf33zmCZLibASjuN4Zrx9BcfTNbOobtXews8n8qyKg3Um6oQc+QHGmTMfQmfEmzU2klEx70MosxPRISYYBOD\\n7Q3QccT0Oqhy12EjgMWF9jG2FOlwf3C2qISTWFdXxEDgsqsjJtOHW/\\nHKK6AQ1qGyQgsWc5BW0STJLDZWEhFTZZZUOgCd73iPOrGZ7qZZOMijNwQ3dv79S6rGEvdLaxH9VWJmS7mDHL3giF/\\ner6d0s+E2jIDjRQGQaECODLBhwJFimLHTEE72eZ8M/dokc5PE120/Ey4eog6GmwHB4yrA+A==\\nSELLO DIGITAL DEL CFDI\\nb5YZlqOHb91 Krijf/\\nTckoqBr1HiNvCONze0ADmg Fcfl5vbiB8w7x6g5uWe9bwjVX4hK30z3vEFYCxwtAJw3kbeucg3orKWKPcx38yJrzddjIMCITzYWjjuws UtiPAeBui2g0qvaLWVkME5m\\nCO2nlQx4CCS0JCh/1NmSg1 siWV15FB/\\neaAe4iZOWpKVyTuxxFTDOzeUOCzlahyg971ZKKqksXZdbAfushpG5TpaHgP00NmvWkz9t0kYK9rYHx3P07xjOruTNiq7u5qOHciYUovUCx2xaXgK8SyzgqEGY\\n6SW+2QAI4DRYHZGgVM7p+tNbj03+1R8hRmOoJS1XNj2XWsQ==\\nNAUL-206563\\nESTE DOCUMENTO ES UNA REPRESENTACION IMPRESA DE UN CFDI\\nPAGINA: 2/2\"\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    ]\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Mistral",
+			"item": [
+				{
+					"name": "ocr",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer AQhsFb2VeXk0yr67o0hvbtbGjOTYWIun"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "model",
+									"value": "mistral-ocr-latest",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/your/image.jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://api.mistral.ai/v1/ocr",
+							"protocol": "https",
+							"host": [
+								"api",
+								"mistral",
+								"ai"
+							],
+							"path": [
+								"v1",
+								"ocr"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json()\r",
+									"pm.environment.set(\"file_id\", jsonData.id)"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mistral_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "purpose",
+									"value": "ocr",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/Users/baker/Documents/GitHub/ocr/sample-pdf/9131643659 Entrega de mercancia.pdf"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://api.mistral.ai/v1/files",
+							"protocol": "https",
+							"host": [
+								"api",
+								"mistral",
+								"ai"
+							],
+							"path": [
+								"v1",
+								"files"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Upload files",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer AQhsFb2VeXk0yr67o0hvbtbGjOTYWIun"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "purpose",
+											"value": "ocr",
+											"type": "text"
+										},
+										{
+											"key": "file",
+											"type": "file",
+											"src": "/C:/Users/baker/Documents/GitHub/ocr/sample-pdf/9131643659 Entrega de mercancia.pdf"
+										}
+									]
+								},
+								"url": {
+									"raw": "https://api.mistral.ai/v1/files",
+									"protocol": "https",
+									"host": [
+										"api",
+										"mistral",
+										"ai"
+									],
+									"path": [
+										"v1",
+										"files"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "",
+							"header": [
+								{
+									"key": "Date",
+									"value": "Mon, 13 Oct 2025 00:30:41 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Transfer-Encoding",
+									"value": "chunked"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "br"
+								},
+								{
+									"key": "mistral-correlation-id",
+									"value": "0199daf9-fe1d-72fe-a836-fbcc59a8c580"
+								},
+								{
+									"key": "x-kong-request-id",
+									"value": "0199daf9-fe1d-72fe-a836-fbcc59a8c580"
+								},
+								{
+									"key": "x-envoy-upstream-service-time",
+									"value": "117"
+								},
+								{
+									"key": "access-control-allow-origin",
+									"value": "*"
+								},
+								{
+									"key": "x-kong-upstream-latency",
+									"value": "421"
+								},
+								{
+									"key": "x-kong-proxy-latency",
+									"value": "5"
+								},
+								{
+									"key": "cf-cache-status",
+									"value": "DYNAMIC"
+								},
+								{
+									"key": "Strict-Transport-Security",
+									"value": "max-age=15552000; includeSubDomains"
+								},
+								{
+									"key": "Server",
+									"value": "cloudflare"
+								},
+								{
+									"key": "CF-RAY",
+									"value": "98dabacebe6e6b41-DFW"
+								},
+								{
+									"key": "alt-svc",
+									"value": "h3=\":443\"; ma=86400"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"id\": \"44e680ab-326f-482c-ac04-7e75ed34a63e\",\n    \"object\": \"file\",\n    \"bytes\": 278859,\n    \"created_at\": 1758740926,\n    \"filename\": \"a0803ea12b05de36f43bfbc03503d0c9\",\n    \"purpose\": \"ocr\",\n    \"sample_type\": \"ocr_input\",\n    \"num_lines\": 0,\n    \"mimetype\": \"application/pdf\",\n    \"source\": \"upload\",\n    \"signature\": \"c5a6dc52498bb46d096700a0a25f9d1d\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Extract OCR",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{mistral_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"model\": \"mistral-ocr-latest\",\r\n    \"document\": \r\n        { \r\n            \"type\": \"file\", \r\n            \"file_id\": \"{{file_id}}\" \r\n        }\r\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://api.mistral.ai/v1/ocr",
+							"protocol": "https",
+							"host": [
+								"api",
+								"mistral",
+								"ai"
+							],
+							"path": [
+								"v1",
+								"ocr"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Extract OCR",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer AQhsFb2VeXk0yr67o0hvbtbGjOTYWIun"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\r\n    \"model\": \"mistral-ocr-latest\",\r\n    \"document\": \r\n        { \r\n            \"type\": \"file\", \r\n            \"file_id\": \"{{file_id}}\" \r\n        }\r\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "https://api.mistral.ai/v1/ocr",
+									"protocol": "https",
+									"host": [
+										"api",
+										"mistral",
+										"ai"
+									],
+									"path": [
+										"v1",
+										"ocr"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "",
+							"header": [
+								{
+									"key": "Date",
+									"value": "Mon, 13 Oct 2025 00:30:51 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Transfer-Encoding",
+									"value": "chunked"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "br"
+								},
+								{
+									"key": "mistral-correlation-id",
+									"value": "0199dafa-1fda-7585-858d-ef98f7f877d4"
+								},
+								{
+									"key": "x-kong-request-id",
+									"value": "0199dafa-1fda-7585-858d-ef98f7f877d4"
+								},
+								{
+									"key": "x-envoy-upstream-service-time",
+									"value": "1819"
+								},
+								{
+									"key": "access-control-allow-origin",
+									"value": "*"
+								},
+								{
+									"key": "x-kong-upstream-latency",
+									"value": "1820"
+								},
+								{
+									"key": "x-kong-proxy-latency",
+									"value": "5"
+								},
+								{
+									"key": "cf-cache-status",
+									"value": "DYNAMIC"
+								},
+								{
+									"key": "Strict-Transport-Security",
+									"value": "max-age=15552000; includeSubDomains"
+								},
+								{
+									"key": "Server",
+									"value": "cloudflare"
+								},
+								{
+									"key": "CF-RAY",
+									"value": "98dabb05ad016b41-DFW"
+								},
+								{
+									"key": "alt-svc",
+									"value": "h3=\":443\"; ma=86400"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"pages\": [\n        {\n            \"index\": 0,\n            \"markdown\": \"# GOmART\\n\\nGO MART CENTRO INSURGENTES C.P. 06470 SAN RAFAEL Ciudad de México\\n\\n## Entrada mercancías\\n\\n|  Information | Doc Num: 5005715661  |\\n| --- | --- |\\n|  Document Date | 14.07.2025  |\\n|  Plant / Description | 2097 / PERSEO Carretera 57-D Km 16 + 800 No., 55790 Nextlalpan de Felipe Sanc  |\\n|  Delivery Note | C7538705  |\\n|  Vendor Number | 100064 PEÑAFIEL BEBIDAS, S.A. DE C.V.  |\\n|  Purchase Order | 4505489560 / 00002  |\\n|  Purchasing Group | ME Mercadería  |\\n|  Telephone |   |\\n\\n|  Material | Description | Quantity | O.Quant.  |\\n| --- | --- | --- | --- |\\n|  1300283 | AGUAFIEL PET 1.5 LT | 36.00 PZ | 36.00 PZ  |\\n|  3000552 | DR PEPPER LAT 355 ML | 12.00 PZ | 12.00 PZ  |\\n|  3000201 | PEÑAFIEL LGT PET LIMONADA 600 ML | 12.00 PZ | 12.00 PZ  |\\n|  3000014 | PEÑAFIEL MINERAL PET 1 LT | 12.00 PZ | 12.00 PZ  |\\n|  3000016 | PEÑAFIEL MINERAL PET 600 ML | 24.00 PZ | 24.00 PZ  |\\n|  3000200 | PEÑAFIEL PET LIMONADA 600 ML | 24.00 PZ | 24.00 PZ  |\\n|  3000451 | PEÑAFIEL PET MANGADA 600 ML | 12.00 PZ | 12.00 PZ  |\\n|  3000502 | PEÑAFIEL PET MANZANADA 600 ML | 24.00 PZ | 24.00 PZ  |\\n|  3000210 | PEÑAFIEL PET NARANJADA 600 ML | 60.00 PZ | 60.00 PZ  |\\n|  3000212 | PEÑAFIEL PET PIÑADA 600 ML | 24.00 PZ | 24.00 PZ  |\\n|  3000217 | PEÑAFIEL PET TORONJADA 600 ML | 24.00 PZ | 24.00 PZ  |\\n|  3000219 | PEÑAFIEL PET TWIST LIMON 600 ML | 84.00 PZ | 84.00 PZ  |\\n|  1400095 | RED BULL LAT SUGAR FREE 250 ML | 12.00 PZ | 12.00 PZ  |\\n|  1400121 | SNAPPLE NR DURAZNO 473 ML | 12.00 PZ | 12.00 PZ  |\\n\\nSUBTOTAL 4,599.31 MXN IVA 668.67 MXN IEPS 0.00 MXN TOTAL 5,267.98 MXN\\n\\nIssued by : 97PERSEO\\n\\nSignature: Date:\",\n            \"images\": [],\n            \"dimensions\": {\n                \"dpi\": 200,\n                \"height\": 2200,\n                \"width\": 1700\n            }\n        }\n    ],\n    \"model\": \"mistral-ocr-2505-completion\",\n    \"document_annotation\": null,\n    \"usage_info\": {\n        \"pages_processed\": 1,\n        \"doc_size_bytes\": 278859\n    }\n}"
+						}
+					]
+				}
+			]
+		}
+	]
+}

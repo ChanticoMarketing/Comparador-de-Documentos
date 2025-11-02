@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getAPI4AIOcrService } from "./api4ai-ocr";
 import { getMistralOcrService } from "./mistral-ocr";
+import { getGoogleVisionOcrService } from "./google-vision-ocr";
 import { getMatcherService } from "./matcher";
 import { authService } from "./auth";
 import { isAuthenticated, AuthRequest, getUserId } from "./auth-config";
@@ -463,13 +464,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
 
-      console.log("DEBUG: Comparación más reciente:", latestComparison ? {
-        id: latestComparison.id,
-        sessionId: latestComparison.sessionId,
-        invoiceFilename: latestComparison.invoiceFilename,
-        createdAt: latestComparison.createdAt
-      } : "No encontrada");
-
       if (!latestComparison || !latestComparison.sessionId) {
         console.log("DEBUG: No hay comparaciones o sesiones disponibles");
         return res.json([]);
@@ -477,9 +471,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Obtener todas las comparaciones de la sesión más reciente
       const sessionComparisons = await storage.getComparisonsBySessionId(latestComparison.sessionId);
-
-      console.log(`DEBUG: Encontradas ${sessionComparisons.length} comparaciones de la sesión ${latestComparison.sessionId}`);
-      console.log("DEBUG: IDs de comparaciones:", sessionComparisons.map(c => ({ id: c.id, invoice: c.invoiceFilename })));
 
       return res.json(sessionComparisons);
     } catch (error) {
@@ -648,6 +639,7 @@ async function processFiles(
 ): Promise<void> {
   const api4aiOcrService = getAPI4AIOcrService();
   const mistralOcrService = getMistralOcrService();
+  const googleVisionOcrService = getGoogleVisionOcrService();
   const matcherService = getMatcherService();
   const allTempFiles: string[] = [];
 
@@ -691,7 +683,7 @@ async function processFiles(
       try {
         // **OCR Archivo Único**
         console.log(`OCR: Procesando archivo único ${file.originalname}`);
-        const fileOcrResult = await mistralOcrService.extractText(file.path);
+        const fileOcrResult = await googleVisionOcrService.extractText(file.path);
 
         if (fileOcrResult.error) {
           throw new Error(`OCR error en archivo único: ${fileOcrResult.error}`);
@@ -728,7 +720,7 @@ async function processFiles(
         console.log(`Archivo único ${file.originalname} guardado exitosamente con sesión ${sessionId}`);
 
         // **Limpieza de Archivos del Par**
-        await mistralOcrService.cleanupFiles([file.path]);
+        await googleVisionOcrService.cleanupFiles([file.path]);
 
         // Actualizar sesión a completada
         await storage.updateSessionStatus(sessionId, "completed");
@@ -748,7 +740,7 @@ async function processFiles(
 
         // Limpiar archivos del par con error
         try {
-          await mistralOcrService.cleanupFiles([file.path]);
+          await googleVisionOcrService.cleanupFiles([file.path]);
         } catch (cleanupError) {
           console.error("Error limpiando archivos del par con error:", cleanupError);
         }
@@ -818,7 +810,7 @@ async function processFiles(
         try {
           // **OCR Factura**
           console.log(`OCR: Procesando factura ${invoiceFile.originalname}`);
-          const invoiceOcrResult = await mistralOcrService.extractText(invoiceFile.path);
+          const invoiceOcrResult = await googleVisionOcrService.extractText(invoiceFile.path);
 
           if (invoiceOcrResult.error) {
             throw new Error(`OCR error en factura: ${invoiceOcrResult.error}`);
@@ -836,7 +828,7 @@ async function processFiles(
           // **OCR Orden de Entrega**
           processingState.currentOcrFile = deliveryFile.originalname;
           console.log(`OCR: Procesando orden de entrega ${deliveryFile.originalname}`);
-          const deliveryOcrResult = await mistralOcrService.extractText(deliveryFile.path);
+          const deliveryOcrResult = await googleVisionOcrService.extractText(deliveryFile.path);
 
           if (deliveryOcrResult.error) {
             throw new Error(`OCR error en orden de entrega: ${deliveryOcrResult.error}`);
@@ -874,7 +866,7 @@ async function processFiles(
           console.log(`Par ${i + 1} guardado exitosamente con sesión ${sessionId}`);
 
           // **Limpieza de Archivos del Par**
-          await mistralOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
+          await googleVisionOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
 
           // Actualizar sesión a completada
           await storage.updateSessionStatus(sessionId, "completed");
@@ -895,7 +887,7 @@ async function processFiles(
 
           // Limpiar archivos del par con error
           try {
-            await mistralOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
+            await googleVisionOcrService.cleanupFiles([invoiceFile.path, deliveryFile.path]);
           } catch (cleanupError) {
             console.error("Error limpiando archivos del par con error:", cleanupError);
           }
@@ -928,7 +920,7 @@ async function processFiles(
     // Limpiar todos los archivos temporales restantes
     if (allTempFiles.length > 0) {
       try {
-        await mistralOcrService.cleanupFiles(allTempFiles);
+        await googleVisionOcrService.cleanupFiles(allTempFiles);
       } catch (cleanupError) {
         console.error("Error en limpieza final de archivos:", cleanupError);
       }

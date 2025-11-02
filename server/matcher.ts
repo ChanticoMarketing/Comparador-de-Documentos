@@ -117,7 +117,7 @@ export class MatcherService {
         model: this.primaryModel,
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        temperature: 0.1, // Low temperature for more consistent results
+        // temperature: 0.1, // Low temperature for more consistent results
       });
 
       return response.choices[0].message.content || "{}";
@@ -132,7 +132,7 @@ export class MatcherService {
             model: this.fallbackModel,
             messages: [{ role: "user", content: prompt }],
             response_format: { type: "json_object" },
-            temperature: 0.1,
+            // temperature: 0.1,
           });
 
           return fallbackResponse.choices[0].message.content || "{}";
@@ -158,36 +158,24 @@ export class MatcherService {
   ): string {
     return `
     You will receive two raw text blocks: one from an invoice and one from a delivery order.
-    
-    Create two lists of products (invoiceList and deliveryOrderList) with the two text inputs with the following structure:
-    {
-      "productName": "Product name",
-      "quantity": "Quantity of the product",
-    }
 
-    You have to normalize the unit to milliliters or grams if any. 
-    The input text will sometimes be a bit messy, try to always associate 1 product with 1 quantity when you detect the column, a fifo in other words.
-    And if you found duplicates items by list, sum them.
-    Consider if you detect the column of number of pieces or total pieces, you have to associate the product with the quantity on that column and not the quantity on the name of the product.
-    
-    Additionally, extract the unit price and calculate the total price (unit price × quantity) for each item list.  
-    Then, compare the total prices of both lists (invoiceList and deliveryOrderList) and determine a general priceMatch status to include in the metadata section:
-    - If both totals match exactly, set "priceMatch": "match".
-    - If one or both totals are missing, set "priceMatch": "N/A".
-    - If totals are present but different, set "priceMatch": "error".
-    
-    When you have the 2 processed list (invoiceList and deliveryOrderList), compare them and return a list of products with the following structure:
-    Return a JSON with the following structure:
+    TASK
+    1) Extract product lines from each text.
+    2) Normalize names, sizes, quantities, and prices.
+    3) Match items one-to-one.
+    4) Return ONLY the JSON object described below (no extra text).
+
+    OUTPUT SCHEMA
     {
       "items": [
         {
-          "productName": "Product name",
-          "invoiceValue": "Value in invoice (e.g., '3 caja')",
-          "deliveryOrderValue": "Value in delivery order (e.g., '3 caja')",
+          "productName": "Canonical name",
+          "invoiceValue": "Quantity in invoice (e.g., '3 caja' or '36 piezas')",
+          "deliveryOrderValue": "Quantity in delivery order",
           "status": "match|warning|error",
           "priceMatch": "match|N/A|error",
-          "price": "The amount of money (e.g., '$12.00') if not match just return empty string",
-          "note": "Optional explanation of any discrepancies or conversions"
+          "price": "Total amount for the row from invoice (e.g., '$12.00') or ''",
+          "note": "Short explanation for conversions or discrepancies"
         }
       ],
       "metadata": [
@@ -199,27 +187,90 @@ export class MatcherService {
           "priceMatch": "match|N/A|error"
         }
       ],
-      "summary": {
-        "matches": 0,
-        "warnings": 0,
-        "errors": 0
-      }
+      "summary": { "matches": 0, "warnings": 0, "errors": 0 }
     }
-    
-    Guidelines:
-    - Focus **only** on product lines.
-    - Consider discrepancies in product name, quantity, and unit (e.g., caja, piezas).
-    - Use fuzzy matching for slightly different names (e.g., "agua min 1000 12p" vs "agua mineral 1000ml").
-    - Match products even if formatting varies or if units need conversion (e.g., "1 caja" vs "12 piezas").
-    - Ignore all metadata and document headers or footers.
-    
+
+    EXTRACTION RULES
+    - Focus ONLY on product lines; ignore headers/footers.
+    - For each line capture: name, unit price (if any), and quantity.
+    - Quantity:
+      • If there are “unit boxes and total pieces” (e.g., Caja | 3 | 12) then totalPieces = 3 * 12.
+      • If there is a single quantity (e.g., Caja | 12) then totalPieces = 12.
+      • Pack tokens in the name (4P, 6P, 12P) mean pieces-per-pack; use only to compute totalPieces.
+    - Build two raw lists: invoiceList and deliveryOrderList. Do NOT drop lines.
+
+    NORMALIZATION
+    - Size: convert everything to ML/GR (0.6L=600 ML, 0.355L=355 ML, 0.250L=250 ML).
+    - Ignore-only tokens for name identity: PET, LAT/LATA, SLK, VNR, RF (keep in display, ignore for matching).
+    - Acronyms/synonyms:
+      • Brand: RB ↔ RED BULL.
+      • LIGHT synonyms: LIGHT, LGT, LIGTH → normalize to LIGHT.
+    - Canonical fields per line:
+      brand, variant tokens (CREAM SODA | LIGHT | SUGAR FREE | REGULAR), sizeInMl, core name tokens (lowercased, de-accented, punctuation stripped).
+
+    SAFE DEDUPE (inside ONE document only)
+    - KEY = (brand, core tokens, variant, sizeInMl).
+    - Merge two lines ONLY if KEY is identical AND totalPieces is identical. Otherwise do not merge. Never delete lines.
+
+    HARD GATES (must pass BEFORE fuzzy)
+    1) Brand buckets (no cross-brand):
+      PENAFIEL/PEÑAFIEL, DR PEPPER, RED BULL/RB, SNAPPLE/SNAP.
+      Items only match within the SAME bucket.
+      If one side is UNKNOWN and the other has brand → do NOT match.
+    2) Variant equality (inside same brand):
+      Extract variant as:
+        has "CREAM SODA" → CREAM SODA
+        else has "SUGAR FREE" → SUGAR FREE
+        else has "LIGHT"/"LGT"/"LIGTH" → LIGHT
+        else → REGULAR
+      Items can match ONLY if variantA == variantB.
+    3) Size equality: sizes must be equal after normalization (ML/GR).
+
+    CONCRETE DO/DON’T (apply literally)
+    - DO:  "DR PEPPER CREAM SODA 0.355L" ↔ "DR PEPPER CREAM SODA 355 ML".
+    - DON’T: "DR PEPPER CREAM SODA 0.355L" ↔ "DR PEPPER 0.355L" (REGULAR) or any other brand.
+    - DO:  "PENAFIEL LIMONADA LIGHT 0.6L" ↔ "PENAFIEL LIMONADA LGT 600 ML".
+    - DON’T: "PENAFIEL LIMONADA 0.6L" ↔ "PENAFIEL LIMONADA LIGHT 0.6L".
+    - DO:  "RB SUGAR FREE 0.250L" ↔ "RED BULL LAT SUGAR FREE 250 ML".
+    - DON’T: cross-brand matches (e.g., DR PEPPER ↔ PENAFIEL).
+
+    MATCHING (deterministic, one-to-one)
+    1) Sort both lists by (brand, sizeInMl, normalized core+variant tokens, original order).
+    2) Within the SAME brand+variant+size, pair by:
+      a) Exact KEY match → pair.
+      b) Otherwise fuzzy similarity on core tokens (≥ 0.65). If multiple, pick highest similarity; tie-break by shortest edit distance, then earliest original order.
+    3) Once paired, remove both from consideration (no reuse).
+    4) Items that fail the gates remain unmatched.
+
+    COMPLETENESS GUARANTEE (no disappearances)
+    - Let N = max(len(invoiceList), len(deliveryOrderList)).
+    - The final items array MUST have exactly N rows.
+    - If an item has no valid partner, create a row with the opposite side empty ("") and set status:"error", priceMatch:"N/A".
+    - Each original parsed line must appear in at most one row.
+
+    PRICES
+    - Compute line total = unitPrice × totalPieces when unit price exists.
+    - Row "price" = invoice line total (or '' if unavailable).
+    - metadata.priceMatch:
+      • both totals exist and are equal → "match"
+      • one/both missing → "N/A"
+      • both exist and differ → "error"
+    - Unmatched rows: priceMatch:"N/A", price:"".
+
+    STATUS
+    - "match": same brand, same variant, same size, equal quantities after conversions.
+    - "warning": same product but quantities differ (explain in note).
+    - "error": no valid partner per gates/rules.
+    - If the text cannot be reliably split into products, return items with status:"error" and priceMatch:"N/A" and explain briefly in "note".
+
     INVOICE TEXT:
     ${invoiceText}
-    
+
     DELIVERY ORDER TEXT:
     ${deliveryOrderText}
-    
+
     Return only the JSON object. Do not include explanations or any additional text.
+
   `;
   }
 
@@ -233,76 +284,29 @@ export class MatcherService {
     return `
     You will receive ONE raw text string that contains BOTH an invoice and a delivery order.
 
-    Input:
+    INPUT
     fileText = ${fileText}
 
-    Goal:
-    1) Detect and split the input into two logical blocks:
+    GOAL
+    1) Split fileText into:
       - invoiceText
       - deliveryOrderText
+    2) Extract product lines from each block.
+    3) Normalize names/sizes/quantities/prices.
+    4) Match items one-to-one under strict gates.
+    5) Return ONLY the JSON object described below (no extra text).
 
-    How to split (apply in order until one works):
-    A) If explicit markers exist, use them:
-      - Headers like “INVOICE TEXT:” / “DELIVERY ORDER TEXT:”
-      - Or clear dividers such as “===INVOICE===” / “===DELIVERY_ORDER===”
-    B) Otherwise, infer by keywords and context (case-insensitive, multilingual if needed):
-      - Invoice indicators: “invoice”, “factura”, “bill to”, “subtotal”, “iva/vat”, “invoice no”, “total invoice”, “amount due”, “rfc”
-      - Delivery indicators: “delivery order”, “orden de entrega”, “do no”, “delivered qty”, “received by”, “dispatch”, “remisión”, “packing list”
-      Assign each detected line to the nearest matching block; if a line has both kinds of cues, prefer the block suggested by surrounding lines and section totals.
-    C) If still ambiguous, split by strongest page/section dividers:
-      - Form feeds, long dashed lines, page headers/footers repeating patterns, or the largest blank-line gap.
-      The first block becomes invoiceText, the second becomes deliveryOrderText.
-
-    If only one block can be confidently detected, treat the remainder as the other block; if still impossible, return an items list with status "error" and priceMatch "N/A" explaining the split failure in "note".
-
-    Processing (same rules as before):
-    - Create two lists of products (invoiceList and deliveryOrderList) from invoiceText and deliveryOrderText with items shaped as:
-      {
-        "productName": "Product name",
-        "quantity": "Quantity of the product"
-      }
-
-    - Focus ONLY on product lines. Ignore headers/footers/addresses/signatures.
-    - Use FIFO alignment when a product column and a quantity/price column are messy; associate each product with its most plausible quantity on the same line/row or aligned column.
-    - Normalize units to milliliters (ml) or grams (g):
-      • L → 1000 ml; cl → 10 ml; oz (fluid) → 29.5735 ml
-      • kg → 1000 g; lb → 453.592 g; oz (weight) → 28.3495 g
-      • Handle patterns like “12x500 ml”, “caja 24 pzas de 355ml”, “pack(6)*2L”
-        → Multiply counts and convert to a single normalized quantity per product.
-    - If duplicates exist within a list (fuzzy name match), sum quantities.
-    - Extract unit price when present; compute line total: unit price × normalized quantity (respect decimal/currency formats like $ 1,234.56 or 1.234,56).
-      • If price is per pack, normalize to per unit before multiplying.
-      • Keep currency symbol from the source if available, else default to empty symbol but numeric value preserved.
-    - Consider if you detect the column of number of pieces or total pieces, you have to associate the product with the quantity on that column and not the quantity on the name of the product
-
-    Matching rules:
-    - Fuzzy match product names across lists (e.g., “agua min 1000 12p” ≈ “agua mineral 1000ml”).
-    - Consider unit conversions and pack expansions (e.g., “1 caja de 12 x 1L” vs “12 L”).
-    - Status per item:
-      • "match"  → product exists in both with equivalent normalized quantity
-      • "warning"→ product exists in both but minor name differences or rounding tolerances
-      • "error"  → product missing in one list or materially different normalized quantity
-    
-    Additionally, extract the unit price and calculate the total price (unit price × quantity) for each item list.  
-    Then, compare the total prices of both lists (invoiceList and deliveryOrderList) and determine a general priceMatch status to include in the metadata section:
-    - If both totals match exactly, set "priceMatch": "match".
-    - If one or both totals are missing, set "priceMatch": "N/A".
-    - If totals are present but different, set "priceMatch": "error".
-
-    Output:
-    Return ONLY the JSON object, no extra text.
-
-    Schema:
+    OUTPUT SCHEMA
     {
       "items": [
         {
-          "productName": "Product name",
-          "invoiceValue": "Value in invoice (e.g., '3 caja', '6000 ml')",
-          "deliveryOrderValue": "Value in delivery order (e.g., '3 caja', '6000 ml')",
+          "productName": "Canonical name",
+          "invoiceValue": "Quantity in invoice (e.g., '3 caja' or '36 piezas' or '6000 ml')",
+          "deliveryOrderValue": "Quantity in delivery order",
           "status": "match|warning|error",
           "priceMatch": "match|N/A|error",
-          "price": "The amount of money (e.g., '$12.00'); empty string if not a match or unavailable",
-          "note": "Optional explanation of discrepancies/conversions (e.g., 'Converted 12x500ml to 6000 ml')"
+          "price": "Invoice row total (e.g., '$12.00') or ''",
+          "note": "Short explanation for conversions/discrepancies"
         }
       ],
       "metadata": [
@@ -314,26 +318,96 @@ export class MatcherService {
           "priceMatch": "match|N/A|error"
         }
       ],
-      "summary": {
-        "matches": 0,
-        "warnings": 0,
-        "errors": 0
-      }
+      "summary": { "matches": 0, "warnings": 0, "errors": 0 }
     }
 
-    Guidelines & heuristics:
-    - Be resilient to OCR noise and column drift.
-    - Strip SKU codes from names when they hinder matching but keep them if needed to disambiguate.
-    - Prefer normalized numeric comparisons with a small tolerance for decimal rounding (±0.5%).
-    - Currency handling: if multiple currencies are detected, do NOT convert; compute totals per detected currency and set priceMatch to "N/A" (note why).
-    - If a unit price is missing on a line, leave its line total blank; still include the item.
+    SPLIT RULES (apply in order until one works)
+    A) Use explicit markers if present: headers like “INVOICE TEXT:” / “DELIVERY ORDER TEXT:” or dividers like “===INVOICE===” / “===DELIVERY_ORDER===”.
+    B) Otherwise infer by keywords (case-insensitive, multilingual):
+      - Invoice cues: invoice, factura, bill to, subtotal, iva/vat, invoice no, total invoice, amount due, rfc.
+      - Delivery cues: delivery order, orden de entrega, do no, delivered qty, received by, dispatch, remisión, packing list.
+      Assign lines to the nearest block. If a line has both cues, use surrounding context and section totals.
+    C) If still ambiguous, split by the strongest section/page divider (form feeds, long dashed rules, repeated headers/footers, largest blank gap).
+    If only one block can be detected, treat the remainder as the other. If impossible, return items with status:"error" and priceMatch:"N/A" explaining the split failure in "note".
 
-    Now process:
-    1) Parse fileText → split into invoiceText and deliveryOrderText (using the rules above).
-    2) Build invoiceList and deliveryOrderList with normalized quantities and summed duplicates.
-    3) Extract unit prices, compute line totals, and compute overall totals.
-    4) Compare lists and produce "items", "metadata", and "summary".
-    5) Return ONLY the JSON object.
+    EXTRACTION
+    - Focus ONLY on product lines; ignore headers/addresses/signatures.
+    - For each line capture: product name, unit price (if any), and quantity.
+    - Quantity semantics:
+      • If “unit boxes and total pieces” appear (e.g., Caja | 3 | 12) → totalPieces = 3 * 12.
+      • If a single quantity appears (e.g., Caja | 12) → totalPieces = 12.
+      • Pack tokens in the name (4P, 6P, 12P) = pieces-per-pack; use ONLY to compute totalPieces.
+    - Build two raw lists: invoiceList and deliveryOrderList. Do NOT drop lines.
+
+    NORMALIZATION (apply BEFORE matching)
+    - Size: convert to ML/GR (0.6L=600 ML, 0.355L=355 ML, 0.250L=250 ML; cl=10 ml; L=1000 ml; kg=1000 g; lb=453.592 g).
+    - Ignore-only tokens for identity: PET, LAT/LATA, SLK, VNR, RF (keep for display, ignore for matching).
+    - Acronyms/synonyms:
+      • Brand: RB ↔ RED BULL.
+      • LIGHT synonyms: LIGHT, LGT, LIGTH → normalize to LIGHT.
+    - Canonical per line: brand, variant tokens (CREAM SODA | LIGHT | SUGAR FREE | REGULAR), sizeInMl, core name tokens (lowercased, de-accented, punctuation stripped).
+
+    SAFE DEDUPE (within ONE document only)
+    - KEY = (brand, core tokens, variant, sizeInMl).
+    - Merge two lines ONLY if KEY is IDENTICAL AND totalPieces is IDENTICAL. Otherwise do NOT merge. Never delete lines.
+
+    HARD GATES (must pass BEFORE fuzzy)
+    1) Brand buckets (no cross-brand):
+      PENAFIEL/PEÑAFIEL, DR PEPPER, RED BULL/RB, SNAPPLE/SNAP.
+      Items may only match within the SAME bucket.
+      If one side is UNKNOWN and the other has a brand → do NOT match.
+    2) Variant equality (inside the same brand):
+      Extract variant as:
+        contains "CREAM SODA" → CREAM SODA
+        else contains "SUGAR FREE" → SUGAR FREE
+        else contains "LIGHT"/"LGT"/"LIGTH" → LIGHT
+        else → REGULAR
+      Items can match ONLY if variantA == variantB.
+    3) Size equality: sizes must be equal after normalization (ML/GR).
+
+    CONCRETE DO/DON’T (apply literally)
+    - DO:  "DR PEPPER CREAM SODA 0.355L" ↔ "DR PEPPER CREAM SODA 355 ML".
+    - DON’T: "DR PEPPER CREAM SODA 0.355L" ↔ "DR PEPPER 0.355L" (REGULAR) or any other brand.
+    - DO:  "PENAFIEL LIMONADA LIGHT 0.6L" ↔ "PENAFIEL LIMONADA LGT 600 ML".
+    - DON’T: "PENAFIEL LIMONADA 0.6L" ↔ "PENAFIEL LIMONADA LIGHT 0.6L".
+    - DO:  "RB SUGAR FREE 0.250L" ↔ "RED BULL LAT SUGAR FREE 250 ML".
+    - DON’T: cross-brand matches.
+
+    MATCHING (deterministic, one-to-one)
+    1) Sort both lists by (brand, sizeInMl, normalized core+variant tokens, original order).
+    2) Within SAME brand+variant+size, pair by:
+      a) Exact KEY match → pair.
+      b) Otherwise fuzzy similarity on core tokens (threshold ≥ 0.65). If multiple, pick highest similarity; tie-break by shortest edit distance, then earliest original order.
+    3) Once paired, remove both from consideration (no reuse).
+    4) Items that fail gates remain unmatched.
+
+    COMPLETENESS (no disappearances)
+    - Let N = max(len(invoiceList), len(deliveryOrderList)).
+    - The final items array MUST have exactly N rows.
+    - If an item has no valid partner, create a row with the opposite side empty ("") and set status:"error", priceMatch:"N/A".
+    - Each original parsed line must appear in at most one row.
+
+    PRICES
+    - Compute line total = unitPrice × totalPieces when unit price exists.
+    - Row "price" = invoice line total (or '' if unavailable).
+    - metadata.priceMatch:
+      • both totals exist and are equal → "match"
+      • one/both missing → "N/A"
+      • both exist and differ → "error"
+    - Unmatched rows: priceMatch:"N/A", price:"".
+
+    STATUS
+    - "match": same brand, same variant, same size, equal quantities after conversions.
+    - "warning": same product but quantities differ (explain in note).
+    - "error": no valid partner per gates/rules.
+    - If the split is unreliable or blocks can’t be determined, return items with status:"error" and priceMatch:"N/A" and explain briefly in "note".
+
+    NOW PROCESS
+    1) Parse fileText → split into invoiceText and deliveryOrderText (using the split rules).
+    2) Build invoiceList and deliveryOrderList with normalized quantities and safe dedupe.
+    3) Extract unit prices, compute line totals and overall totals.
+    4) Match lists and produce "items", "metadata", and "summary".
+    5) Return ONLY the JSON object (no extra text).
     `;
   }
 

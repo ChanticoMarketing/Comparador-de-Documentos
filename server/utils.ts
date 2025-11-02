@@ -432,11 +432,9 @@ export function normalizeProductString(str: string): string {
   return str
     .toLowerCase()                                                            // Parse to lower
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")                         // remove accents
-    .replace(/(\d+)\s?ml/g, "$1")                                             // 600 ml -> 600
-    .replace(/(\d+(\.\d+)?)\s?l\b/g, (_, val) => `${parseFloat(val) * 1000}`) // 0.6L -> 600
     .replace(/\bp\b|\bpz\b|\s+de\s+|\s+con\s+/g, "")
     .replace(/[^a-z0-9]+/g, " ")                                              // Remove special characters
-    .trim()                                          // optional: sort words
+    .trim()                                                                   // optional: sort words
 }
 
 /**
@@ -446,4 +444,124 @@ export function normalizeProductString(str: string): string {
  */
 export function isSingleMode(mode: string): boolean {
   return mode === "single";
+}
+
+
+type OcrGateResult = {
+  isProductDoc: boolean;
+  score: number;
+  reasons: string[];
+  stats: {
+    totalLines: number;
+    productLikeLines: number;
+    tableHeaderHits: number;
+    priceQtyColumnHits: number;
+    repetitionRatio: number;
+  };
+};
+
+const RE_TABLE_HEADERS = [
+  /\b(material|codigo\s+de\s+(barras|producto)|sku)\b.*\b(descripcion|description)\b.*\b(cantidad|quantity|pz|pzas|unidad)\b/i,
+  /\b(descripcion|description)\b.*\b(cantidad|quantity)\b/i,
+  /\b(unidad|u\.)\b.*\b(total|piezas|pz)\b/i,
+];
+
+const RE_PRICE_QTY_COLUMNS = [
+  /\b(precio\s+unitario|unit\s*price|importe|subtotal|total)\b/i,
+  /\b(cantidad|qty|total\s+piezas|pz|pzas)\b/i,
+];
+
+const RE_PRODUCT_LINE = [
+  // units and sizes
+  /\b\d+(?:[.,]\d+)?\s*(?:ml|l|lt|lts|litro?s?|kg|g|gr)\b/i,
+  // pack patterns
+  /\bp\s*\d+\s*p\b/i,       // "P 12P"
+  /\bpk\s*\d+\b/i,          // "pk12"
+  /\b\d+\s*pz(?:as)?\b/i,   // "12 PZ", "12 pzas"
+  // packaging tokens
+  /\b(?:pet|lat|nr|vnr)\b/i,
+];
+
+const RE_BRANDISH = /\b(red\s*bull|dr\s*pepper|snapple|pen[a|e]fiel|aguafiel|mineral|limonada|naranjada|toronjada|manzanada|mangada|pi[ñn]ada|twist)\b/i;
+
+// obvious noise/repetition terms
+const RE_NOISE = /\b(regimen(?:\s+fiscal)?|referencia|folio\s+fiscal|uso\s+cfdi|domicilio|expedido|r\.?f\.?c\.?|certificado|moneda|forma\s+de\s+pago|tipo\s+comprobante)\b/i;
+
+export function gateOcrForProductList(markdown: string, {
+  minProductLines = 3,
+  repetitionLimit = 0.45, // 45% or more repeated lines => likely noise
+  passScore = 5,
+} = {}): OcrGateResult {
+  const lines = markdown
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const totalLines = lines.length;
+
+  // Normalize lines for repetition check (case/accents/punct)
+  const norm = (s: string) =>
+    s.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const normCounts = new Map<string, number>();
+  for (const l of lines) {
+    const k = norm(l);
+    if (!k) continue;
+    normCounts.set(k, (normCounts.get(k) || 0) + 1);
+  }
+  const maxRepeat = Math.max(0, ...Array.from(normCounts.values()));
+  const repetitionRatio = totalLines ? maxRepeat / totalLines : 0;
+
+  // Signals
+  let tableHeaderHits = 0;
+  for (const re of RE_TABLE_HEADERS) {
+    if (re.test(markdown)) tableHeaderHits++;
+  }
+
+  let priceQtyColumnHits = 0;
+  for (const re of RE_PRICE_QTY_COLUMNS) {
+    if (re.test(markdown)) priceQtyColumnHits++;
+  }
+
+  let productLikeLines = 0;
+  for (const raw of lines) {
+    const line = raw.replace(/\|/g, " ").trim(); // handle md table rows
+    if (RE_NOISE.test(line)) continue;
+
+    const productSignals = RE_PRODUCT_LINE.some(re => re.test(line));
+    const brandSignal = RE_BRANDISH.test(line);
+    // A line counts if it has units/packs/packaging OR a brand term + a qty token
+    if (productSignals || (brandSignal && /\b\d/.test(line))) {
+      productLikeLines++;
+    }
+  }
+
+  // Score (tune as you like)
+  let score = 0;
+  score += tableHeaderHits * 2;
+  score += priceQtyColumnHits * 2;
+  score += Math.min(productLikeLines, 10); // cap so long docs don’t dominate
+  if (repetitionRatio > 0.35) score -= 2;
+  if (repetitionRatio > 0.45) score -= 4;
+
+  const reasons: string[] = [];
+  if (tableHeaderHits) reasons.push(`Detected ${tableHeaderHits} product table header(s).`);
+  if (priceQtyColumnHits) reasons.push(`Found ${priceQtyColumnHits} price/qty columns.`);
+  reasons.push(`Product-like lines: ${productLikeLines}.`);
+  reasons.push(`Repetition ratio: ${(repetitionRatio * 100).toFixed(1)}%.`);
+  if (productLikeLines < minProductLines) reasons.push(`Too few product lines (< ${minProductLines}).`);
+  if (repetitionRatio >= repetitionLimit) reasons.push(`High repetition (>= ${(repetitionLimit * 100).toFixed(0)}%).`);
+
+  const isProductDoc = score >= passScore && productLikeLines >= minProductLines && repetitionRatio < repetitionLimit;
+
+  return {
+    isProductDoc,
+    score,
+    reasons,
+    stats: { totalLines, productLikeLines, tableHeaderHits, priceQtyColumnHits, repetitionRatio },
+  };
 }
