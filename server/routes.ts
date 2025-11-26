@@ -126,6 +126,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===========================
+  // Email Verification Routes
+  // ===========================
+
+  // Resend verification email
+  app.post("/api/auth/resend-verification", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
+      const user = req.user as any;
+      await authService.requestEmailVerification(user.id);
+
+      res.status(200).json({ message: "Email de verificación enviado" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Verify email with token
+  app.get("/api/auth/verify-email/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      await authService.verifyEmail(token);
+
+      res.status(200).json({ message: "Email verificado exitosamente" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===========================
+  // Password Reset Routes
+  // ===========================
+
+  // Request password reset
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email es requerido" });
+      }
+
+      await authService.requestPasswordReset(email);
+
+      // Always return success to avoid revealing if email exists
+      res.status(200).json({
+        message: "Si el email existe, recibirás instrucciones para restablecer tu contraseña"
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Verify reset token validity
+  app.get("/api/auth/verify-reset-token/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const resetToken = await storage.getPasswordResetToken(token);
+
+      if (!resetToken) {
+        return res.status(400).json({
+          valid: false,
+          message: "Token inválido o ya usado"
+        });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return res.status(400).json({
+          valid: false,
+          message: "El token ha expirado"
+        });
+      }
+
+      res.status(200).json({ valid: true });
+    } catch (error: any) {
+      res.status(400).json({ valid: false, message: error.message });
+    }
+  });
+
+  // Reset password with token
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({
+          message: "Token y contraseña son requeridos"
+        });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          message: "La contraseña debe tener al menos 6 caracteres"
+        });
+      }
+
+      await authService.resetPassword(token, password);
+
+      res.status(200).json({ message: "Contraseña restablecida exitosamente" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===========================
+  // Two-Factor Authentication Routes
+  // ===========================
+
+  // Enable 2FA
+  app.post("/api/auth/2fa/enable", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
+      const user = req.user as any;
+      await authService.enable2FA(user.id);
+
+      res.status(200).json({ message: "2FA habilitado exitosamente" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Disable 2FA
+  app.post("/api/auth/2fa/disable", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
+      const user = req.user as any;
+      await authService.disable2FA(user.id);
+
+      res.status(200).json({ message: "2FA deshabilitado exitosamente" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Verify 2FA code
+  app.post("/api/auth/2fa/verify", async (req: Request, res: Response) => {
+    try {
+      const { userId, code } = req.body;
+
+      if (!userId || !code) {
+        return res.status(400).json({ message: "Usuario y código son requeridos" });
+      }
+
+      const isValid = await authService.verify2FACode(userId, code);
+
+      if (!isValid) {
+        return res.status(400).json({ message: "Código inválido o expirado" });
+      }
+
+      res.status(200).json({ message: "Código verificado exitosamente", valid: true });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Resend 2FA code
+  app.post("/api/auth/2fa/resend", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ message: "Usuario requerido" });
+      }
+
+      await authService.generate2FACode(userId);
+
+      res.status(200).json({ message: "Código enviado exitosamente" });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===========================
+  // Notification Preferences Routes
+  // ===========================
+
+  // Get notification preferences
+  app.get("/api/notifications/preferences", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
+      const user = req.user as any;
+      const preferences = await storage.getNotificationPreferences(user.id);
+
+      if (!preferences) {
+        // Return defaults if none exist
+        return res.json({
+          emailOnComparison: true,
+          emailOnError: true,
+          emailWeeklySummary: false,
+        });
+      }
+
+      res.json(preferences);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update notification preferences
+  app.post("/api/notifications/preferences", async (req: Request, res: Response) => {
+    try {
+      if (!req.isAuthenticated || !req.isAuthenticated()) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
+      const user = req.user as any;
+      const { emailOnComparison, emailOnError, emailWeeklySummary } = req.body;
+
+      const updated = await storage.updateNotificationPreferences(user.id, {
+        emailOnComparison,
+        emailOnError,
+        emailWeeklySummary,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+
   // Get application settings
   app.get("/api/settings", async (req: Request, res: Response) => {
     try {
@@ -205,10 +438,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Upload files for processing
   app.post("/api/upload", upload.fields([
-      { name: "invoices", maxCount: 10 },
-      { name: "deliveryOrders", maxCount: 10 },
-      { name: "singleFile", maxCount: 1 }
-    ]),
+    { name: "invoices", maxCount: 10 },
+    { name: "deliveryOrders", maxCount: 10 },
+    { name: "singleFile", maxCount: 1 }
+  ]),
     async (req: Request, res: Response) => {
       try {
         const files = req.files as {
@@ -307,9 +540,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           filename: '',
           path: '',
           buffer: Buffer.alloc(0),
-          stream: new Readable({ read() {} }),
+          stream: new Readable({ read() { } }),
         };
-        
+
         if (isSingleMode(body.mode)) {
           singleFile = files.singleFile[0];
         }
@@ -759,8 +992,8 @@ async function processFiles(
         console.log(`\n=== Lote completado: archivos únicos procesados ===`);
       } else {
         console.log(`\n=== Lote completado con errores ===`);
-      } 
-    
+      }
+
     } else {
       // Procesar en modo multiple
 
