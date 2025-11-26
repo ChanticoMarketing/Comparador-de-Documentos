@@ -1,0 +1,11 @@
+# node modules folder
+node_modules/
+
+# env file
+.env
+
+# build folder
+dist/
+
+# keys folder
+keys/

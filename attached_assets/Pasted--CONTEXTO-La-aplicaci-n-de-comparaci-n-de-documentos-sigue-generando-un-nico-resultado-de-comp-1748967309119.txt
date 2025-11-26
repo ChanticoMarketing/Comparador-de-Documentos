@@ -1,0 +1,49 @@
+### CONTEXTO:
+La aplicación de comparación de documentos sigue generando un único resultado de comparación agregado cuando se suben múltiples "bloques" (pares de factura/orden de entrega). El objetivo es que cada par de (factura, orden de entrega) subido en una sola operación se procese de forma independiente, resultando en una sesión y un resultado de comparación distintos para cada par. La lógica central de comparación en `server/matcher.ts` no debe ser modificada.
+
+### TAREA:
+Asegurar que la función de procesamiento de archivos en `server/routes.ts` (actualmente `processFiles` o su equivalente actualizado) itere sobre cada par de factura/orden de entrega, creando una sesión separada y un resultado de comparación para cada uno.
+
+### ARCHIVO PRINCIPAL A MODIFICAR:
+- `server/routes.ts`
+
+### REQUISITOS DETALLADOS PARA LA FUNCIÓN DE PROCESAMIENTO DE ARCHIVOS EN `server/routes.ts`:
+
+1.  **Revisar/Refactorizar la Función de Procesamiento Principal (ej. `processFiles` o `processBatchOfFilePairs`):**
+    * **Iteración por Pares**:
+        * La función debe aceptar arrays de `invoiceFiles` y `deliveryOrderFiles`.
+        * Calcular el número de pares a procesar: `const numPairs = Math.min(invoiceFiles.length, deliveryOrderFiles.length);`.
+        * Es crucial que la lógica itere `numPairs` veces.
+    * **Dentro del Bucle de Iteración (para cada par `i`):**
+        * **Creación de Sesión Individual**:
+            * Debe llamarse a `await storage.createSession(invoiceFiles[i].originalname, deliveryOrderFiles[i].originalname);` para CADA PAR. Guardar el `sessionId` devuelto específicamente para este par.
+        * **Procesamiento OCR Individualizado**:
+            * Realizar OCR (`ocrService.extractText()`) para `invoiceFiles[i]` y `deliveryOrderFiles[i]` por separado. Los textos resultantes (`invText_i`, `delText_i`) y datos estructurados (`invStruct_i`, `delStruct_i`) deben ser específicos de este par.
+        * **Comparación AI Individualizada**:
+            * Llamar a `await matcherService.compareDocuments(invText_i, delText_i, invStruct_i, delStruct_i, invoiceFiles[i].originalname, deliveryOrderFiles[i].originalname);`.
+        * **Guardado de Resultado Individual**:
+            * El `ComparisonResult` devuelto por `matcherService.compareDocuments` debe guardarse usando el `sessionId` específico del par actual: `await storage.saveComparisonResult(sessionIdDelPar_i, comparisonResult_i);`.
+        * **Limpieza de Archivos Temporales del Par**: Los archivos temporales (`invoiceFiles[i].path`, `deliveryOrderFiles[i].path`) deben limpiarse después de que el par haya sido completamente procesado (OCR, AI y guardado).
+    * **Gestión del Estado de Procesamiento Global (`processingState`):**
+        * `processingState.files`: Debe ser un array que liste todos los archivos individuales del lote (N facturas + N órdenes). El estado (`status`) de cada archivo en este array debe actualizarse (`pending` -> `processing` (OCR) -> `completed` (OCR) -> `processing` (AI) -> `completed` (AI/guardado) o `error`).
+        * `processingState.ocrProgress`: Debe calcularse como `(archivos_individuales_ocr_completados / total_archivos_individuales_en_lote) * 100`.
+        * `processingState.aiProgress`: Debe calcularse como `(pares_comparados_completamente / numPairs) * 100`.
+        * `processingState.currentOcrFile`: Debe actualizarse para reflejar el archivo actualmente en OCR.
+    * **Manejo de Errores por Par**: Si un par falla durante OCR o AI, su sesión específica debe marcarse como "error" en la base de datos, y el error debe registrarse. El procesamiento de los siguientes pares puede continuar (o detenerse, según la lógica de error implementada para el lote).
+    * **Limpieza Final del Lote**: Después de que todos los pares hayan sido procesados o el proceso haya sido cancelado, todos los archivos originales subidos (de la variable `req.files` en la ruta `/api/upload`) que no hayan sido limpiados individualmente deben ser eliminados.
+
+2.  **Ruta `POST /api/upload`:**
+    * Debe llamar a la función refactorizada de procesamiento de lotes de pares.
+    * No debe crear una única sesión para todo el lote. Las sesiones se crean por par dentro de la función de procesamiento.
+    * La respuesta HTTP debe ser `202 Accepted` con un mensaje indicando que el procesamiento del lote ha comenzado.
+
+3.  **Ruta `POST /api/processing/cancel`:**
+    * Al cancelar, `processingState.isProcessing` debe ponerse a `false` para detener el bucle de procesamiento de pares.
+    * Se debe intentar limpiar cualquier archivo temporal restante del lote actual.
+
+### OBJETIVO FINAL:
+Asegurar que si, por ejemplo, 3 facturas y 3 órdenes de entrega son subidas juntas, la aplicación genere 3 sesiones distintas en la base de datos, cada una con su propio `ComparisonResult`. Esto resultará en 3 entradas separadas en el historial y permitirá que el usuario vea "1 página" (un informe de comparación) por cada "bloque" (par de documentos) procesado.
+
+### NO MODIFICAR (PROTEGER):
+- La lógica interna de `server/matcher.ts` y `server/ocr.ts`.
+- La estructura de `ComparisonResult` y cómo la genera `MatcherService`.

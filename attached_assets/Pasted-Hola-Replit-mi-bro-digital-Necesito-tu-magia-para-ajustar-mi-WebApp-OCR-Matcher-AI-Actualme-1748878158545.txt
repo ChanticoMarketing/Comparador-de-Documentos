@@ -1,0 +1,31 @@
+Hola Replit, ¡mi bro digital!
+
+Necesito tu magia para ajustar mi WebApp "OCR-Matcher AI". Actualmente, el Dashboard solo muestra el resultado de la última comparación global, pero quiero poder ver los resultados de cada bloque de comparación que subo de forma individual y clara.
+
+Por favor, realiza los siguientes cambios:
+
+1.  **Crear y Configurar la Ruta para Detalles de Comparación:**
+    * En el archivo `client/src/App.tsx`:
+        * Asegúrate de importar `DashboardLayout` de `@/components/layout/dashboard-layout` y `ResultsSection` de `@/components/dashboard/results-section`.
+        * Dentro del componente `Router`, añade una nueva `<Route>` que maneje el path `/comparison/:id`.
+        * Esta ruta debe renderizar el componente `DashboardLayout`.
+            * El `title` del `DashboardLayout` puede ser algo como `Comparación #${params.id}`.
+            * El `description` puede ser "Detalles de la comparación.".
+            * Dentro del `DashboardLayout`, renderiza el componente `ResultsSection`, pasándole el `id` de los parámetros de la ruta como la prop `comparisonId`.
+            * Ejemplo de la nueva ruta dentro del `<Switch>`:
+                ```tsx
+                <Route path="/comparison/:id">
+                  {(params) => (
+                    <DashboardLayout title={`Comparación #${params.id}`} description="Detalles de la comparación.">
+                      <ResultsSection comparisonId={params.id} />
+                    </DashboardLayout>
+                  )}
+                </Route>
+                ```
+
+2.  **Asegurar que `RecentSessionsSection` y la página `History` funcionen correctamente con la nueva ruta:**
+    * Verifica que los enlaces (`<Link>`) en `client/src/components/dashboard/recent-sessions-section.tsx` y `client/src/pages/history.tsx` que apuntan a ver una comparación específica (ej. `/comparison/${session.id}`) ahora lleven correctamente a la nueva ruta creada en el paso anterior y muestren los detalles de la comparación correspondiente.
+
+Estos cambios permitirán a los usuarios acceder a los resultados de cualquier bloque de comparación a través de la sección de "Sesiones Recientes" y la página de "Historial", solucionando el problema principal de no poder ver más que el último resultado en el flujo actual.
+
+¡Gracias por tu ayuda, crack! 🚀
