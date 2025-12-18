@@ -171,6 +171,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email es requerido" });
       }
 
+      // Check if email service is configured
+      if (!process.env.RESEND_API_KEY) {
+        console.error('⚠️ RESEND_API_KEY no está configurado. No se pueden enviar emails.');
+        // In development, return a helpful error message
+        if (process.env.NODE_ENV !== 'production') {
+          return res.status(500).json({ 
+            message: "El servicio de email no está configurado. Por favor, configura RESEND_API_KEY en las variables de entorno." 
+          });
+        }
+        // In production, still return success for security
+        return res.status(200).json({
+          message: "Si el email existe, recibirás instrucciones para restablecer tu contraseña"
+        });
+      }
+
       await authService.requestPasswordReset(email);
 
       // Always return success to avoid revealing if email exists
@@ -178,6 +193,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Si el email existe, recibirás instrucciones para restablecer tu contraseña"
       });
     } catch (error: any) {
+      console.error('Error en forgot-password:', error);
+      // Log the full error for debugging
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error details:', error);
+      }
       res.status(400).json({ message: error.message });
     }
   });

@@ -9,6 +9,8 @@ import History from "@/pages/history";
 import Settings from "@/pages/settings";
 import Login from "@/pages/auth/login";
 import Register from "@/pages/auth/register";
+import ForgotPassword from "@/pages/auth/forgot-password";
+import ResetPassword from "@/pages/auth/reset-password";
 import ComparisonDetail from "@/pages/comparison-detail";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -84,6 +86,18 @@ function App() {
             <Route path="/register">
               <PublicRoute>
                 <Register />
+              </PublicRoute>
+            </Route>
+
+            <Route path="/auth/forgot-password">
+              <PublicRoute>
+                <ForgotPassword />
+              </PublicRoute>
+            </Route>
+
+            <Route path="/auth/reset-password/:token">
+              <PublicRoute>
+                <ResetPassword />
               </PublicRoute>
             </Route>
 

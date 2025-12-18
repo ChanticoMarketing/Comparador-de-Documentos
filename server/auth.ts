@@ -205,7 +205,14 @@ export class AuthService {
     await storage.createPasswordResetToken(user.id, token, expiresAt);
 
     // Send password reset email
-    await emailService.sendPasswordResetEmail(user.email, token, user.username);
+    try {
+      await emailService.sendPasswordResetEmail(user.email, token, user.username);
+      console.log(`✓ Token de recuperación creado para usuario ${user.username} (${user.email})`);
+    } catch (emailError: any) {
+      console.error('❌ Error enviando email de recuperación:', emailError);
+      // Re-throw to let the route handler know there was an error
+      throw new Error(`Error al enviar el email: ${emailError.message}`);
+    }
   }
 
   /**

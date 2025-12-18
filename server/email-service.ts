@@ -5,7 +5,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Email configuration
 const EMAIL_FROM = process.env.EMAIL_FROM || 'Comparador de Documentos <onboarding@resend.dev>';
-const APP_URL = process.env.APP_URL || 'http://localhost:5000';
+const APP_URL = process.env.APP_URL || 'http://localhost';
+const APP_PORT = process.env.APP_PORT || 3000;
 
 /**
  * Email Service for sending authentication and notification emails
@@ -15,7 +16,7 @@ export class EmailService {
      * Send email verification link
      */
     async sendVerificationEmail(email: string, token: string, username: string): Promise<void> {
-        const verificationUrl = `${APP_URL}/auth/verify-email?token=${token}`;
+        const verificationUrl = `${APP_URL}:${APP_PORT}/auth/verify-email?token=${token}`;
 
         try {
             await resend.emails.send({
@@ -36,10 +37,17 @@ export class EmailService {
      * Send password reset email
      */
     async sendPasswordResetEmail(email: string, token: string, username: string): Promise<void> {
-        const resetUrl = `${APP_URL}/auth/reset-password/${token}`;
+        const resetUrl = `${APP_URL}:${APP_PORT}/auth/reset-password/${token}`;
+
+        // Check if Resend is configured
+        if (!process.env.RESEND_API_KEY) {
+            const errorMsg = 'RESEND_API_KEY no está configurado';
+            console.error(`❌ ${errorMsg}`);
+            throw new Error(errorMsg);
+        }
 
         try {
-            await resend.emails.send({
+            const result = await resend.emails.send({
                 from: EMAIL_FROM,
                 to: email,
                 subject: '🔐 Recuperación de contraseña - Comparador de Documentos',
@@ -47,9 +55,18 @@ export class EmailService {
             });
 
             console.log(`✓ Email de recuperación de contraseña enviado a ${email}`);
-        } catch (error) {
-            console.error('Error enviando email de recuperación:', error);
-            throw new Error('No se pudo enviar el email de recuperación');
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('Resend response:', result);
+            }
+        } catch (error: any) {
+            console.error('❌ Error enviando email de recuperación:', error);
+            if (error.message) {
+                console.error('Error message:', error.message);
+            }
+            if (error.response) {
+                console.error('Resend API response:', error.response);
+            }
+            throw new Error(`No se pudo enviar el email de recuperación: ${error.message || 'Error desconocido'}`);
         }
     }
 
