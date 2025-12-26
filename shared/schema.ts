@@ -9,8 +9,11 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(), // Almacenará contraseña hasheada
   email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").default(false).notNull(),
   firstName: text("first_name"),
   lastName: text("last_name"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
+  twoFactorSecret: text("two_factor_secret"), // Almacena secreto encriptado para OTP
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -126,10 +129,66 @@ export const settings = pgTable("settings", {
 export type AppSettings = typeof settings.$inferSelect;
 export type InsertAppSettings = typeof settings.$inferInsert;
 
+// Email verification tokens
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type InsertEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+
+// Password reset tokens
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+// Two-factor authentication codes
+export const twoFactorCodes = pgTable("two_factor_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  code: text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type TwoFactorCode = typeof twoFactorCodes.$inferSelect;
+export type InsertTwoFactorCode = typeof twoFactorCodes.$inferInsert;
+
+// Notification preferences
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique().references(() => users.id),
+  emailOnComparison: boolean("email_on_comparison").default(true).notNull(),
+  emailOnError: boolean("email_on_error").default(true).notNull(),
+  emailWeeklySummary: boolean("email_weekly_summary").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;
+
+
 // Define relationships
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   comparisons: many(comparisons),
+  emailVerificationTokens: many(emailVerificationTokens),
+  passwordResetTokens: many(passwordResetTokens),
+  twoFactorCodes: many(twoFactorCodes),
+  notificationPreferences: many(notificationPreferences),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
@@ -173,3 +232,7 @@ export const insertComparisonSchema = createInsertSchema(comparisons);
 export const insertComparisonItemSchema = createInsertSchema(comparisonItems);
 export const insertComparisonMetadataSchema = createInsertSchema(comparisonMetadata);
 export const insertSettingsSchema = createInsertSchema(settings);
+export const insertEmailVerificationTokenSchema = createInsertSchema(emailVerificationTokens);
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens);
+export const insertTwoFactorCodeSchema = createInsertSchema(twoFactorCodes);
+export const insertNotificationPreferenceSchema = createInsertSchema(notificationPreferences);

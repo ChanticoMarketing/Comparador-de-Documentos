@@ -1,6 +1,6 @@
 import { db } from "@db";
 import { eq, desc, and } from "drizzle-orm";
-import { 
+import {
   sessions,
   comparisons,
   settings,
@@ -8,7 +8,15 @@ import {
   Comparison,
   comparisonItems,
   comparisonMetadata,
-  AppSettings
+  AppSettings,
+  emailVerificationTokens,
+  passwordResetTokens,
+  twoFactorCodes,
+  notificationPreferences,
+  EmailVerificationToken,
+  PasswordResetToken,
+  TwoFactorCode,
+  NotificationPreference
 } from "@shared/schema";
 import { ComparisonResult, ResultItem, MetadataItem } from "../client/src/types";
 
@@ -48,8 +56,8 @@ export class StorageService {
     errorMessage?: string
   ): Promise<void> {
     await db.update(sessions)
-      .set({ 
-        status, 
+      .set({
+        status,
         errorMessage,
         completedAt: status === "completed" ? new Date() : undefined
       })
@@ -63,7 +71,6 @@ export class StorageService {
     const result = await db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId)
     });
-    
     return result;
   }
 
@@ -404,6 +411,192 @@ export class StorageService {
   async getSettings(): Promise<AppSettings | null> {
     const settingsData = await db.query.settings.findFirst();
     return settingsData || null;
+  }
+
+  // ===========================
+  // Email Verification Tokens
+  // ===========================
+
+  /**
+   * Create email verification token
+   */
+  async createEmailVerificationToken(
+    userId: number,
+    token: string,
+    expiresAt: Date
+  ): Promise<EmailVerificationToken> {
+    // Delete any existing tokens for this user
+    await db.delete(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.userId, userId));
+
+    const [verificationToken] = await db.insert(emailVerificationTokens)
+      .values({ userId, token, expiresAt })
+      .returning();
+
+    return verificationToken;
+  }
+
+  /**
+   * Get email verification token
+   */
+  async getEmailVerificationToken(token: string): Promise<EmailVerificationToken | null> {
+    const result = await db.query.emailVerificationTokens.findFirst({
+      where: eq(emailVerificationTokens.token, token)
+    });
+
+    return result || null;
+  }
+
+  /**
+   * Delete email verification token
+   */
+  async deleteEmailVerificationToken(tokenId: number): Promise<void> {
+    await db.delete(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.id, tokenId));
+  }
+
+  // ===========================
+  // Password Reset Tokens
+  // ===========================
+
+  /**
+   * Create password reset token
+   */
+  async createPasswordResetToken(
+    userId: number,
+    token: string,
+    expiresAt: Date
+  ): Promise<PasswordResetToken> {
+    // Delete any existing unused tokens for this user
+    await db.delete(passwordResetTokens)
+      .where(and(
+        eq(passwordResetTokens.userId, userId),
+        eq(passwordResetTokens.used, false)
+      ));
+
+    const [resetToken] = await db.insert(passwordResetTokens)
+      .values({ userId, token, expiresAt })
+      .returning();
+
+    return resetToken;
+  }
+
+  /**
+   * Get password reset token
+   */
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | null> {
+    const result = await db.query.passwordResetTokens.findFirst({
+      where: and(
+        eq(passwordResetTokens.token, token),
+        eq(passwordResetTokens.used, false)
+      )
+    });
+
+    return result || null;
+  }
+
+  /**
+   * Mark password reset token as used
+   */
+  async markPasswordResetTokenAsUsed(tokenId: number): Promise<void> {
+    await db.update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.id, tokenId));
+  }
+
+  // ===========================
+  // Two-Factor Authentication Codes
+  // ===========================
+
+  /**
+   * Create 2FA code
+   */
+  async create2FACode(
+    userId: number,
+    code: string,
+    expiresAt: Date
+  ): Promise<TwoFactorCode> {
+    // Delete any existing unused codes for this user
+    await db.delete(twoFactorCodes)
+      .where(and(
+        eq(twoFactorCodes.userId, userId),
+        eq(twoFactorCodes.used, false)
+      ));
+
+    const [twoFactorCode] = await db.insert(twoFactorCodes)
+      .values({ userId, code, expiresAt })
+      .returning();
+
+    return twoFactorCode;
+  }
+
+  /**
+   * Get and verify 2FA code
+   */
+  async get2FACode(userId: number, code: string): Promise<TwoFactorCode | null> {
+    const result = await db.query.twoFactorCodes.findFirst({
+      where: and(
+        eq(twoFactorCodes.userId, userId),
+        eq(twoFactorCodes.code, code),
+        eq(twoFactorCodes.used, false)
+      )
+    });
+
+    return result || null;
+  }
+
+  /**
+   * Mark 2FA code as used
+   */
+  async mark2FACodeAsUsed(codeId: number): Promise<void> {
+    await db.update(twoFactorCodes)
+      .set({ used: true })
+      .where(eq(twoFactorCodes.id, codeId));
+  }
+
+  // ===========================
+  // Notification Preferences
+  // ===========================
+
+  /**
+   * Get notification preferences for a user
+   */
+  async getNotificationPreferences(userId: number): Promise<NotificationPreference | null> {
+    const result = await db.query.notificationPreferences.findFirst({
+      where: eq(notificationPreferences.userId, userId)
+    });
+
+    return result || null;
+  }
+
+  /**
+   * Update notification preferences
+   */
+  async updateNotificationPreferences(
+    userId: number,
+    preferences: Partial<NotificationPreference>
+  ): Promise<NotificationPreference> {
+    const existing = await this.getNotificationPreferences(userId);
+
+    if (existing) {
+      // Update existing preferences
+      const [updated] = await db.update(notificationPreferences)
+        .set({ ...preferences, updatedAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      // Create new preferences with defaults
+      const [newPrefs] = await db.insert(notificationPreferences)
+        .values({
+          userId,
+          emailOnComparison: preferences.emailOnComparison ?? true,
+          emailOnError: preferences.emailOnError ?? true,
+          emailWeeklySummary: preferences.emailWeeklySummary ?? false,
+        })
+        .returning();
+      return newPrefs;
+    }
   }
 }
 
